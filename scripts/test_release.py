@@ -105,7 +105,6 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(f'/{name}"\n      sha256 "{str(index) * 64}"', formula)
         for expected in (
             "class Atelier < Formula",
-            'version "0.1.0-rc.1"',
             "depends_on arch: :arm64",
             'bin.install "bin/atelier"',
             'run [opt_bin/"atelier", "daemon"]',
@@ -122,6 +121,10 @@ class ReleaseTests(unittest.TestCase):
         subprocess.run(
             ["ruby", "-c", path], check=True, capture_output=True, timeout=10
         )
+
+    def test_formula_lets_homebrew_read_the_version_from_the_url(self):
+        formula = release.formula("0.1.0-rc.1", self.checksums())
+        self.assertNotIn('  version "', formula)
 
     def test_formula_rejects_bad_manifests_and_versions(self):
         lines = self.checksums().splitlines()

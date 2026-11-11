@@ -111,7 +111,7 @@ and `smoke`. Archive layout, file-size limits and validation live in
 `atelier daemon` with `keep_alive true`, Homebrew's standard PATH and one
 log under Homebrew's `var/log/`.
 
-Verification: nine script contract tests, the native tarball smoke test, then
+Verification: ten script contract tests, the native tarball smoke test, then
 `brew style`, `brew audit --strict --online`, install and `brew test` in
 the protected job. The workflow is complete only after all three builds and the
 tap job pass and the owner's local install reports the candidate version.

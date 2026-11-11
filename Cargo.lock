@@ -91,6 +91,12 @@ dependencies = [
 [[package]]
 name = "atelier-opencode"
 version = "0.1.0-rc.2"
+dependencies = [
+ "atelier-command",
+ "atelier-core",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "clap"

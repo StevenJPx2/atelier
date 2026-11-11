@@ -1,8 +1,9 @@
 # atelier
 
-**Status: slice 0 in progress.** The binary supports `--version` and `--help`.
-The factory below is the approved design; the daemon and issue loop are
-planned for slice 1. See the [slice index](docs/plans/README.md).
+**Status: slice 0 implemented, `0.1.0-rc.2`.** Install with
+`brew install StevenJPx2/taps/atelier`; the binary supports `--version` and
+`--help`. The factory below is the approved design. The daemon and issue loop
+are planned for slice 1. See the [slice index](docs/plans/README.md).
 
 A personal software factory. You plan a feature as a GitHub issue and add the
 `atelier:build` label. atelier starts a builder agent in its own worktree, which

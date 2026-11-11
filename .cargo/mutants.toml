@@ -1,0 +1,6 @@
+# A test anywhere in the workspace can catch a mutant.
+test_workspace = true
+test_tool = "nextest"
+# Kani harnesses run under cargo kani, not nextest.
+exclude_globs = ["**/proofs.rs"]
+exclude_re = []

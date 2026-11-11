@@ -1,3 +1,27 @@
-//! Git worktrees.
+//! Worktrees and branches through the `git` command, behind core's
+//! `Worktrees` role.
 //!
-//! Status: planned for slice 1. This crate defines no behavior in slice 0.
+//! ```no_run
+//! use std::path::Path;
+//!
+//! use atelier_core::{Repo, WorktreeRequest, Worktrees};
+//! use atelier_git::Git;
+//!
+//! let git = Git::new("/Users/me/.local/share/atelier/worktrees");
+//! let repo = Repo("StevenJPx2/chauffeur".into());
+//!
+//! let tree = git.create(&WorktreeRequest {
+//!     repo: &repo,
+//!     checkout: Path::new("/Users/me/Documents/Projects/chauffeur"),
+//!     name: "issue-12",
+//!     branch: "issue-12-fix-the-dead-link",
+//!     base: "v2",
+//! })?;
+//! // → /Users/me/.local/share/atelier/worktrees/StevenJPx2/chauffeur/issue-12
+//! # Ok::<(), atelier_core::PluginError>(())
+//! ```
+
+mod command;
+mod worktree;
+
+pub use worktree::Git;

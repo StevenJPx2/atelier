@@ -38,6 +38,52 @@ The checks decide when the work is done. The agent does not judge it, and no
 rulebook or skill has to be followed: a builder knows its issue, the project's
 `AGENTS.md` and the contract in [`prompts/builder.md`](prompts/builder.md).
 
+## A core and its plugins
+
+The core is the issue machine and the agent orchestrator: it sees issues, decides
+what happens to each (claim, start, stop, block, close), and starts an agent as the
+project's config says. It knows no programming language, forge or agent. Plugins
+do, each a Rust crate in this repository, compiled into the one `atelier` binary.
+
+```mermaid
+flowchart TB
+    CLI["crates/cli<br/>the atelier binary"] --> GitHub["plugins/github<br/>Forge"]
+    CLI --> OpenCode["plugins/opencode<br/>Agent"]
+    CLI --> Langs["plugins/rust, plugins/tla<br/>Language"]
+    CLI --> Git["crates/git<br/>Worktrees"]
+    GitHub --> Core["crates/core<br/>issue machine, traits"]
+    OpenCode --> Core
+    Langs --> Core
+    Git --> Core
+```
+
+| Kind     | Does                                         | Plugins       |
+| -------- | -------------------------------------------- | ------------- |
+| Forge    | Issues, labels, pull requests, checks and CI | `github`      |
+| Agent    | Starts and stops a builder or critic session | `opencode`    |
+| Language | Finds itself in a project; names its gates   | `rust`, `tla` |
+
+An external plugin is named by `owner/repo@sha` and joins the binary as a pinned
+Git dependency of this workspace, reviewed and released like any other. atelier
+loads no code at run time.
+
+## Gates
+
+`atelier check` runs every gate of the project's languages, the same way for the
+builder before each push and in CI, where `gates.yml` runs one job per gate.
+
+```mermaid
+flowchart LR
+    Config[".atelier/config.toml<br/>languages"] --> Check["atelier check"]
+    Plugins["rust and tla plugins<br/>gates as commands"] --> Check
+    Check --> Local["the builder<br/>before each push"]
+    Check --> CI["gates.yml<br/>one job per gate"]
+```
+
+- **rust**: fmt, Clippy with `-D warnings`, nextest, doc tests, cargo-mutants on
+  the pull request's diff (`--in-diff`), and Kani when a crate has proofs.
+- **tla**: TLC on each `*.tla` spec, in a project of any language.
+
 ## An issue's states
 
 Labels hold the state, so an issue shows where its feature is.
@@ -67,16 +113,19 @@ branch and pull request.
 
 ## What lives where
 
-| atelier holds                                                   | A project holds                                     |
-| --------------------------------------------------------------- | --------------------------------------------------- |
-| The poller and CLI                                              | `.atelier/config.toml`: base branch, checks, limits |
-| The builder and critic prompts                                  | `AGENTS.md`: how to build, test and record it       |
-| Reusable workflows: Rust checks, mutants, Kani, TLA+, PR body   | A `check.yml` that calls them, pinned by commit     |
-| The pull request template and labels, written by `atelier init` |                                                     |
+| atelier holds                  | A project holds                                 |
+| ------------------------------ | ----------------------------------------------- |
+| The core, plugins and CLI      | `.atelier/config.toml`: base, plugins, limits   |
+| The builder and critic prompts | `AGENTS.md`: how to build, test and record it   |
+| The reusable `gates.yml`       | `.github/workflows/atelier.yml`, which calls it |
+| The pull request template      |                                                 |
 
 ```toml
 # .atelier/config.toml
 base = "v2"
+forge = "github"
+agent = "opencode"
+languages = ["rust", "tla"]
 
 [limits]
 red_rounds = 5      # failed CI rounds before the builder stops

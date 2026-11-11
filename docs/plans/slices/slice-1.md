@@ -2,8 +2,8 @@
 
 **Status: In progress.** The core is built: the issue machine and its Kani
 proofs, the poll's events, `observe` and `act`, the roles and the registry.
-So is `crates/git`. Then the `github` plugin
-([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode` plugin
+So are `crates/git` and the `github` plugin
+([#6](https://github.com/StevenJPx2/atelier/issues/6)). Then the `opencode` plugin
 ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI and daemon,
 one pull request each.
 
@@ -260,8 +260,10 @@ pub trait Worktrees {
 }
 ```
 
-A plugin registers the roles it fills under its name. A project with no agent
-named takes the build's only one.
+A plugin registers the roles it fills under its name. A tracker is
+registered as a constructor, so each project builds its own from its
+`[[tracker]]` settings; forges and agents are one instance each. A project
+with no agent named takes the build's only one.
 
 ```rust
 pub trait Plugin {
@@ -273,15 +275,42 @@ pub enum Role { Tracker, Forge, Agent }
 
 pub struct MissingPlugin { pub role: Role, pub name: Option<String>, pub available: Vec<&'static str> }
 
+impl<'a> MakeTracker<'a> {
+    pub fn make(&self, settings: &Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError>;
+}
+
 impl<'a> Registry<'a> {
     pub fn new(plugins: &[&'a dyn Plugin]) -> Self;
-    pub fn tracker(&mut self, tracker: &'a dyn Tracker);
+    pub fn tracker(
+        &mut self,
+        make: impl Fn(&Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError> + 'a,
+    );
     pub fn forge(&mut self, forge: &'a dyn Forge);
     pub fn agent(&mut self, agent: &'a dyn Agent);
-    pub fn find_tracker(&self, name: &str) -> Result<&'a dyn Tracker, MissingPlugin>;
+    pub fn find_tracker(&self, name: &str) -> Result<&MakeTracker<'a>, MissingPlugin>;
     pub fn find_forge(&self, name: &str) -> Result<&'a dyn Forge, MissingPlugin>;
     pub fn find_agent(&self, name: Option<&str>) -> Result<&'a dyn Agent, MissingPlugin>;
 }
+```
+
+A plugin's settings are plain values, so core needs no config format and each
+plugin reads only its own keys. `only` fails on a key the plugin does not
+know, so a misspelt setting is never quietly ignored; each error names its
+dotted path, such as `labels.working.color`.
+
+```rust
+pub enum Setting { Text(String), Number(i64), Flag(bool), List(Vec<Self>), Table(Settings) }
+
+pub struct Settings(BTreeMap<String, Setting>);
+
+impl Settings {
+    pub fn with(self, key: &str, value: Setting) -> Self;
+    pub fn only(&self, path: &str, known: &[&str]) -> Result<(), SettingsError>;
+    pub fn text(&self, path: &str, key: &str) -> Result<Option<&str>, SettingsError>;
+    pub fn table(&self, path: &str, key: &str) -> Result<Option<&Self>, SettingsError>;
+}
+
+pub struct SettingsError { pub key: String, pub problem: String }
 ```
 
 The brief is the contract filled in for one issue, then each plugin's part,
@@ -467,18 +496,11 @@ impl Git {
 impl Worktrees for Git {}
 ```
 
-Each `git` call runs in its own process group with a 120-second deadline and
-`GIT_TERMINAL_PROMPT=0`, keeping at most 1 MiB of each output. On the
-deadline the group is killed. Reaching `origin` fails transiently; anything
-else fails permanently.
+Each `git` call has a 120-second deadline and `GIT_TERMINAL_PROMPT=0`, through
+[`atelier-command`](#running-tools-cratescommand). Reaching `origin` fails
+transiently; anything else fails permanently.
 
 ```rust
-struct Output {
-    pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
-}
-
 fn git(dir: &Path, args: &[&str]) -> Result<Output, PluginError>;
 fn checked(dir: &Path, args: &[&str]) -> Result<String, PluginError>;
 ```
@@ -490,17 +512,183 @@ the checkout. A new branch starts from the newest `origin/v2` and is reused;
 a local branch keeps its commits; a branch only on `origin` is continued and
 tracked; a folder on another branch is refused; removing drops the worktree
 and its changes, keeps the branch, and succeeds twice; names that could leave
-the root are refused. A command past its deadline is killed with its children
-within the deadline, and only remote failures are transient.
+the root are refused. Only remote failures are transient.
 
 ```sh
 cargo nextest run -p atelier-git
 ```
 
-### The `github` plugin and the `opencode` plugin
+### Running tools (`crates/command`)
 
-Planned in their own issues: [#6](https://github.com/StevenJPx2/atelier/issues/6)
-and [#7](https://github.com/StevenJPx2/atelier/issues/7).
+`git`, `gh` and `opencode` each run through one runner, so a hung tool never
+holds up a poll.
+
+Files: [`crates/command/src/lib.rs`](../../../crates/command/src/lib.rs).
+
+```rust
+let mut command = Command::new("git");
+command.arg("--version");
+
+let output = atelier_command::run(command, Duration::from_secs(10))?;
+// → Output { success: true, stdout: "git version 2.56.0\n", stderr: "" }
+```
+
+#### Structure
+
+A command runs with no input in its own process group. On its deadline the
+whole group is killed, so a child it started cannot hold the output open, and
+the failure is transient. At most 1 MiB of each output is kept.
+
+```rust
+pub struct Output {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+pub fn run(command: Command, deadline: Duration) -> Result<Output, PluginError>;
+```
+
+#### Verification
+
+A command past its deadline is killed with its children within the deadline;
+output stops at its bound; a missing tool fails transiently.
+
+### The `github` plugin (`plugins/github`)
+
+GitHub as tracker and forge, through `gh` ([#6](https://github.com/StevenJPx2/atelier/issues/6)).
+Its CI part, `gates.yml`, comes with slice 2.
+
+Files: [`plugins/github/`](../../../plugins/github/README.md).
+
+```rust
+let github = GitHub::new();
+let repo = Repo("StevenJPx2/chauffeur".into());
+let mine = Filter { assignee: Some("StevenJPx2".into()), ..Filter::default() };
+
+let listing = github.issues(&repo, Mark::Build, &mine, Some(etag))?;
+// → Listing::Unchanged, from a 304
+
+github.mark(&repo, "12", Mark::Working)?;
+
+let pull = github.pull_request(&repo, "issue-12-fix-the-dead-link")?;
+// → Some(PullRequest::Open { number: 31, draft: true, failed_rounds: 1, checks: Passed })
+```
+
+#### Structure
+
+`GitHub` runs `gh` from `PATH`, or another program, such as a stand-in in
+tests. It registers as `github`, the name its issue keys carry: as a forge
+itself, and as a tracker through `tracker`, which builds one project's
+`GitHubTracker` from its `[[tracker]]` settings. `create_labels` makes that
+project's labels with `gh label create --force`.
+
+```rust
+pub struct GitHub {
+    program: PathBuf,
+}
+
+impl GitHub {
+    pub fn new() -> Self;
+    pub fn with_program(program: impl Into<PathBuf>) -> Self;
+    pub fn tracker(&self, settings: &Settings) -> Result<GitHubTracker, SettingsError>;
+}
+
+pub struct GitHubTracker {
+    program: PathBuf,
+    labels: Labels,
+}
+
+impl GitHubTracker {
+    pub const fn labels(&self) -> &Labels;
+    pub fn create_labels(&self, repo: &Repo) -> Result<(), PluginError>;
+}
+
+impl Plugin for GitHub {}
+impl Forge for GitHub {}
+impl Tracker for GitHubTracker {}
+```
+
+Each mark is a label, and so is `improvement`, for a critic's findings that do
+not block. A project sets any of them in its `[[tracker]]`; what it leaves
+out keeps atelier's own. A name must not be empty and a color must be six hex
+digits; an unknown key is refused.
+
+```toml
+# .atelier/config.toml
+[[tracker]]
+plugin = "github"
+labels.working = { name = "bot:working", color = "5319e7" }
+```
+
+```rust
+pub struct Label {
+    pub name: String,
+    pub color: String,
+    pub description: String,
+}
+
+pub struct Labels {
+    pub build: Label,
+    pub working: Label,
+    pub blocked: Label,
+    pub improvement: Label,
+}
+
+impl Labels {
+    pub fn from_settings(settings: &Settings) -> Result<Self, SettingsError>;
+    pub const fn mark(&self, mark: Mark) -> &Label;
+    pub const fn all(&self) -> [&Label; 4];
+}
+```
+
+Every call is `gh api --include`, read whatever its status: a 304 is
+unchanged; a 403 with `Retry-After` or no rate left, or a 429, waits that
+long (60 seconds when GitHub does not say); a 5xx or no reply is transient;
+any other error status is permanent. A listing reads at most ten pages and
+keeps a tag only when it is one page. A filter's `query` uses search, with no
+tag. Removing a label that is gone succeeds.
+
+```rust
+struct Reply {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+
+impl Reply {
+    pub fn header(&self, name: &str) -> Option<&str>;
+    pub fn next(&self) -> Option<&str>;
+    pub fn ok(self, what: &str) -> Result<Self, PluginError>;
+}
+```
+
+The forge asks one GraphQL query for the newest pull request on the branch,
+with its last 100 commits' combined check state. A failed round is a commit
+whose checks failed or errored; the head's checks are pending until they
+report. The brief tells the builder to open the pull request as a draft,
+watch it with a sourcefed `github` monitor and mark it ready with
+`gh pr ready`; `gh pr merge` and `gh release` are denied.
+
+#### Verification
+
+A stand-in `gh` replays replies captured from GitHub, listed in
+[`fixtures/README.md`](../../../plugins/github/tests/github/fixtures/README.md):
+one page keeps its tag and the same listing then answers 304; pages are
+followed, pull requests dropped and no tag kept; a filter becomes the query
+string; a query goes through search; a missing issue is permanent; a rate
+limit waits 60 seconds, a refusal is final and an unreachable GitHub retries;
+marks, comments and closing send what GitHub expects; labels are made once
+each; a project's own labels are listed, set, made and briefed; a repository that is not `owner/name` is refused before any call; PR
+#8's real history reads as merged, and open with one failed round; the brief
+names GitHub's commands; the plugin registers under the name its issues carry.
+Unit tests read every status and every pull request state. One test runs the
+same reads against the real GitHub when `gh` is signed in; mutation testing
+runs with it skipped, as CI does.
+
+### The `opencode` plugin
+
+Planned in its own issue: [#7](https://github.com/StevenJPx2/atelier/issues/7).
 
 ### The CLI and daemon (`crates/cli`)
 

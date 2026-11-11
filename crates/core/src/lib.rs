@@ -7,10 +7,11 @@ mod plugin;
 mod poll;
 mod roles;
 mod seen;
+mod settings;
 
 pub use brief::Brief;
 pub use machine::{Action, Event, Mark, Phase, Pipeline, PipelineError, Reason, step};
-pub use plugin::{MissingPlugin, Plugin, Registry, Role};
+pub use plugin::{MakeTracker, MissingPlugin, Plugin, Registry, Role};
 pub use poll::{
     Observation, Observed, Plugins, Project, Record, Report, Source, State, Step, act, observe,
 };
@@ -19,3 +20,4 @@ pub use roles::{
     WorktreeRequest, Worktrees,
 };
 pub use seen::{Checks, Marks, PullRequest, Seen, StageOutcome, events};
+pub use settings::{Setting, Settings, SettingsError};

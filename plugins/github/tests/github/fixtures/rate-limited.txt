@@ -1,0 +1,9 @@
+HTTP/2.0 403 Forbidden
+Content-Type: application/json; charset=utf-8
+Retry-After: 60
+X-Ratelimit-Limit: 5000
+X-Ratelimit-Remaining: 0
+X-Ratelimit-Reset: 1794409451
+X-Ratelimit-Resource: core
+
+{"message":"API rate limit exceeded for user ID 33600496.","documentation_url":"https://docs.github.com/rest/overview/rate-limits-for-the-rest-api","status":"403"}

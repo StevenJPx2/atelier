@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+atelier-command = { path = "../command" }
 atelier-core = { path = "../core" }
 
 [lints]

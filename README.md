@@ -45,14 +45,14 @@ what happens to each (claim, start, stop, block, close), and starts an agent as 
 project's config says. It knows no programming language, issue tracker, forge or
 agent. Plugins do, each a Rust crate in this repository, compiled into the one
 `atelier` binary. Each plugin registers the kinds it provides: `plugins/github`
-is both the tracker and the forge, and a project with its issues in Jira pairs a
-`jira` tracker with the `github` forge.
+is both a tracker and the forge. A project has one forge and one agent, and any
+number of trackers, such as GitHub and Jira together, each with its own filter.
 
 ```mermaid
 flowchart TB
     CLI["crates/cli<br/>atelier binary"] --> GitHub["plugins/github<br/>Tracker, Forge"]
     CLI --> OpenCode["plugins/opencode<br/>Agent"]
-    CLI --> Langs["plugins/rust, plugins/tla<br/>Language"]
+    CLI --> Langs["plugins/rust, tla, typescript<br/>Language"]
     CLI --> Git["crates/git<br/>Worktrees"]
     GitHub --> Core["crates/core<br/>issue machine, traits"]
     OpenCode --> Core
@@ -60,12 +60,12 @@ flowchart TB
     Git --> Core
 ```
 
-| Kind     | Does                                           | Plugins       |
-| -------- | ---------------------------------------------- | ------------- |
-| Tracker  | Finds, reads, marks and closes issues          | `github`      |
-| Forge    | Pull requests, checks, and how gates run in CI | `github`      |
-| Agent    | Starts and stops a builder or critic session   | `opencode`    |
-| Language | Finds itself in a project; names its gates     | `rust`, `tla` |
+| Kind     | Does                                     | Plugins                     |
+| -------- | ---------------------------------------- | --------------------------- |
+| Tracker  | Finds, marks and closes issues           | `github`                    |
+| Forge    | Pull requests, checks, how CI runs gates | `github`                    |
+| Agent    | Starts and stops builders and critics    | `opencode`                  |
+| Language | Finds its roots; names their gates       | `rust`, `tla`, `typescript` |
 
 Every plugin lives in this repository and ships in the release; atelier loads no
 code at run time.
@@ -99,6 +99,9 @@ never runs them: a failed gate reaches it as a failed check, through sourcefed.
   (`--in-diff`), and Kani when a crate has proofs.
 - **tla**: a root is a directory with `*.tla` specs. TLC on each, in a project of
   any language.
+- **typescript**: a root is an npm, Bun or pnpm workspace, or a package outside
+  one. Its `check` script when it has one, as sourcefed's `npm run check`;
+  otherwise `tsc --noEmit` and its `build` and `test` scripts.
 
 ## An issue's states
 
@@ -157,8 +160,9 @@ languages = []      # nothing under vendor/ is checked
 ```
 
 A filter narrows which `atelier:build` issues atelier takes, by `assignee`,
-`author`, `labels` or the tracker's own query. Your own filter in
-`~/.config/atelier/projects.toml`, such as `assignee`, narrows it to your issues.
+`author`, `labels` or the tracker's own query. Each tracker, listed as
+`[[tracker]]`, has its own. Your own filters in `~/.config/atelier/projects.toml`,
+one for each tracker, such as `assignee`, narrow them to your issues.
 
 ## Pull requests
 

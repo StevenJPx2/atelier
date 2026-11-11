@@ -66,6 +66,9 @@ version = "0.1.0-rc.2"
 [[package]]
 name = "atelier-git"
 version = "0.1.0-rc.2"
+dependencies = [
+ "atelier-core",
+]
 
 [[package]]
 name = "atelier-github"

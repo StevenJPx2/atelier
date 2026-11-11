@@ -2,7 +2,7 @@
 
 **Status: In progress.** The core is built: the issue machine and its Kani
 proofs, the poll's events, `observe` and `act`, the roles and the registry.
-Then `crates/git`, the `github` plugin
+So is `crates/git`. Then the `github` plugin
 ([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode` plugin
 ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI and daemon,
 one pull request each.
@@ -428,22 +428,74 @@ cargo mutants -p atelier-core
 
 ### Worktrees (`crates/git`)
 
-Planned. A worktree for each issue under
-`~/.local/share/atelier/worktrees/<repo>/issue-<n>`, on the issue's branch,
-made from the base or reused.
+A worktree for each issue under
+`~/.local/share/atelier/worktrees/<owner>/<repo>/issue-<n>`, on the issue's
+branch: reused when it is there, made from the local branch, the branch on
+`origin`, or a new branch from `origin/<base>`.
+
+Files: [`crates/git/`](../../../crates/git/README.md).
 
 ```rust
+let git = Git::new("/Users/me/.local/share/atelier/worktrees");
+
 let tree = git.create(&WorktreeRequest {
-    repo: &repo,
-    checkout: &checkout,
+    repo: &Repo("StevenJPx2/chauffeur".into()),
+    checkout: Path::new("/Users/me/Documents/Projects/chauffeur"),
     name: "issue-12",
     branch: "issue-12-fix-the-dead-link",
-    base: "origin/v2",
+    base: "v2",
 })?;
-// → ~/.local/share/atelier/worktrees/chauffeur/issue-12
+// → /Users/me/.local/share/atelier/worktrees/StevenJPx2/chauffeur/issue-12
 ```
 
-Verified by tests against a real temporary repository.
+#### Structure
+
+`Git` fills core's `Worktrees` role. A worktree already on another branch
+is refused; a local branch is never reset; removing forces out what the
+builder left and keeps the branch. A repository that is not `owner/name`,
+or a part that could leave the root, is refused.
+
+```rust
+pub struct Git {
+    root: PathBuf,
+}
+
+impl Git {
+    pub fn new(root: impl Into<PathBuf>) -> Self;
+}
+
+impl Worktrees for Git {}
+```
+
+Each `git` call runs in its own process group with a 120-second deadline and
+`GIT_TERMINAL_PROMPT=0`, keeping at most 1 MiB of each output. On the
+deadline the group is killed. Reaching `origin` fails transiently; anything
+else fails permanently.
+
+```rust
+struct Output {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+fn git(dir: &Path, args: &[&str]) -> Result<Output, PluginError>;
+fn checked(dir: &Path, args: &[&str]) -> Result<String, PluginError>;
+```
+
+#### Verification
+
+Tests against real repositories: a bare `origin` with `v2`, and a clone as
+the checkout. A new branch starts from the newest `origin/v2` and is reused;
+a local branch keeps its commits; a branch only on `origin` is continued and
+tracked; a folder on another branch is refused; removing drops the worktree
+and its changes, keeps the branch, and succeeds twice; names that could leave
+the root are refused. A command past its deadline is killed with its children
+within the deadline, and only remote failures are transient.
+
+```sh
+cargo nextest run -p atelier-git
+```
 
 ### The `github` plugin and the `opencode` plugin
 

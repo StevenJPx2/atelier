@@ -17,7 +17,7 @@ flowchart TD
 | --------------------- | --------------------------------------------- | --------------------------- |
 | `cli`                 | The `atelier` binary                          | Version and help in slice 0 |
 | `core`                | Issue machine and plugin contracts            | Built, slice 1              |
-| `git`                 | Worktrees and branches behind core's contract | Planned, slice 1            |
+| `git`                 | Worktrees and branches behind core's contract | Built, slice 1              |
 | `../plugins/github`   | GitHub tracker and forge                      | Planned, slice 1            |
 | `../plugins/opencode` | OpenCode sessions and permissions             | Planned, slice 1            |
 

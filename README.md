@@ -44,9 +44,10 @@ The core is the issue machine and the agent orchestrator: it sees issues, decide
 what happens to each (claim, start, stop, block, close), and starts an agent as the
 project's config says. It knows no programming language, issue tracker, forge or
 agent. Plugins do, each a Rust crate in this repository, compiled into the one
-`atelier` binary. Each plugin registers the kinds it provides: `plugins/github`
-is both a tracker and the forge. A project has one forge and one agent, and any
-number of trackers, such as GitHub and Jira together, each with its own filter.
+`atelier` binary. A plugin is generic; it registers the roles it fills:
+`plugins/github` is both a tracker and the forge. A project has one forge and one
+agent, and any number of trackers, such as GitHub and Jira together, each with its
+own filter.
 
 ```mermaid
 flowchart TB
@@ -60,7 +61,7 @@ flowchart TB
     Git --> Core
 ```
 
-| Kind     | Does                                     | Plugins                     |
+| Role     | Does                                     | Plugins                     |
 | -------- | ---------------------------------------- | --------------------------- |
 | Tracker  | Finds, marks and closes issues           | `github`                    |
 | Forge    | Pull requests, checks, how CI runs gates | `github`                    |
@@ -96,16 +97,17 @@ never runs them: a failed gate reaches it as a failed check, through sourcefed.
 
 The gates follow the code-discipline policy, one check each:
 
-- **rust**: a root is a Cargo workspace or a crate outside one. fmt, Clippy with
-  `-D warnings`, nextest, doc tests, rustdoc with `-D warnings`, cargo-deny,
-  cargo-mutants on the pull request's diff (`--in-diff`), and Kani when a crate
-  has proofs.
-- **tla**: a root is a directory with `*.tla` specs. TLC on each, in a project of
-  any language.
-- **typescript**: a root is an npm, Bun or pnpm workspace, or a package outside
-  one. oxfmt, Oxlint with the vendored anti-slop plugin and no warnings, `tsc -b`,
-  Effect diagnostics when it uses Effect, its tests, `fallow audit`, and the
-  package manager's audit, after a frozen install.
+- **rust** ([#2](https://github.com/StevenJPx2/atelier/issues/2)): a root is a
+  Cargo workspace or a crate outside one. fmt, Clippy with `-D warnings`,
+  nextest, doc tests, rustdoc with `-D warnings`, cargo-deny, cargo-mutants on
+  the pull request's diff (`--in-diff`), and Kani when a crate has proofs.
+- **tla** ([#3](https://github.com/StevenJPx2/atelier/issues/3)): a root is a
+  directory with `*.tla` specs. TLC on each, in a project of any language.
+- **typescript** ([#4](https://github.com/StevenJPx2/atelier/issues/4)): a root is
+  an npm, Bun or pnpm workspace, or a package outside one. oxfmt, Oxlint with the
+  vendored anti-slop plugin and no warnings, `tsgo -b`, Effect diagnostics when
+  it uses Effect, its tests, `fallow audit`, and the package manager's audit,
+  after a frozen install.
 
 ## An issue's states
 

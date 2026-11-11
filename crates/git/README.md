@@ -18,7 +18,7 @@ flowchart TD
 | File          | Holds                                                    |
 | ------------- | -------------------------------------------------------- |
 | `worktree.rs` | `Git`, core's `Worktrees`, and where each worktree lives |
-| `command.rs`  | Running `git` with a deadline and bounded output         |
+| `command.rs`  | Running `git` through `atelier-command`, never prompting |
 
 ```rust
 let git = Git::new("/Users/me/.local/share/atelier/worktrees");

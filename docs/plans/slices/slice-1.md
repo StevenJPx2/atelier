@@ -467,18 +467,11 @@ impl Git {
 impl Worktrees for Git {}
 ```
 
-Each `git` call runs in its own process group with a 120-second deadline and
-`GIT_TERMINAL_PROMPT=0`, keeping at most 1 MiB of each output. On the
-deadline the group is killed. Reaching `origin` fails transiently; anything
-else fails permanently.
+Each `git` call has a 120-second deadline and `GIT_TERMINAL_PROMPT=0`, through
+[`atelier-command`](#running-tools-cratescommand). Reaching `origin` fails
+transiently; anything else fails permanently.
 
 ```rust
-struct Output {
-    pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
-}
-
 fn git(dir: &Path, args: &[&str]) -> Result<Output, PluginError>;
 fn checked(dir: &Path, args: &[&str]) -> Result<String, PluginError>;
 ```
@@ -490,12 +483,47 @@ the checkout. A new branch starts from the newest `origin/v2` and is reused;
 a local branch keeps its commits; a branch only on `origin` is continued and
 tracked; a folder on another branch is refused; removing drops the worktree
 and its changes, keeps the branch, and succeeds twice; names that could leave
-the root are refused. A command past its deadline is killed with its children
-within the deadline, and only remote failures are transient.
+the root are refused. Only remote failures are transient.
 
 ```sh
 cargo nextest run -p atelier-git
 ```
+
+### Running tools (`crates/command`)
+
+`git`, `gh` and `opencode` each run through one runner, so a hung tool never
+holds up a poll.
+
+Files: [`crates/command/src/lib.rs`](../../../crates/command/src/lib.rs).
+
+```rust
+let mut command = Command::new("git");
+command.arg("--version");
+
+let output = atelier_command::run(command, Duration::from_secs(10))?;
+// → Output { success: true, stdout: "git version 2.56.0\n", stderr: "" }
+```
+
+#### Structure
+
+A command runs with no input in its own process group. On its deadline the
+whole group is killed, so a child it started cannot hold the output open, and
+the failure is transient. At most 1 MiB of each output is kept.
+
+```rust
+pub struct Output {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+pub fn run(command: Command, deadline: Duration) -> Result<Output, PluginError>;
+```
+
+#### Verification
+
+A command past its deadline is killed with its children within the deadline;
+output stops at its bound; a missing tool fails transiently.
 
 ### The `github` plugin and the `opencode` plugin
 

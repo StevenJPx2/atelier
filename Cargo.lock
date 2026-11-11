@@ -60,6 +60,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atelier-command"
+version = "0.1.0-rc.2"
+dependencies = [
+ "atelier-core",
+]
+
+[[package]]
 name = "atelier-core"
 version = "0.1.0-rc.2"
 
@@ -67,6 +74,7 @@ version = "0.1.0-rc.2"
 name = "atelier-git"
 version = "0.1.0-rc.2"
 dependencies = [
+ "atelier-command",
  "atelier-core",
 ]
 

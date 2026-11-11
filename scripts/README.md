@@ -46,7 +46,7 @@ requires exactly those three checksums and rejects ambiguous input.
 ```sh
 python3 scripts/release.py sums dist
 
-python3 scripts/release.py formula 0.1.0-rc.1 dist/SHA256SUMS \
+python3 scripts/release.py formula 0.1.0-rc.2 dist/SHA256SUMS \
   --out /path/to/homebrew-taps/Formula/atelier.rb
 ```
 

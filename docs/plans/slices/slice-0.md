@@ -1,7 +1,7 @@
 # Slice 0: install and run atelier
 
-**Status: In progress.** Code and local gates pass. The owner approves the
-merge and candidate tag; release CI and the Homebrew install complete this slice.
+**Status: Implemented, `0.1.0-rc.2`.** The candidate installs through Homebrew
+and passes its real formula test.
 
 You can install atelier and check its version. The issue loop and daemon are
 planned for slice 1; the service definition is available but is not started.
@@ -22,6 +22,20 @@ flowchart LR
     Approval --> Tap["Generate, audit, install<br/>push formula"]
     Tap --> Install["brew install<br/>atelier --version"]
 ```
+
+## Recording
+
+The Homebrew-installed candidate prints its version and help in the left pane.
+The right pane shows the real Homebrew test executing that installed binary;
+the shell reports exit status 0. Slice 0 has no daemon or model session.
+
+The terminal-control capture runs in a scratch repository with isolated XDG
+configuration and state. It is H.264, 1600 pixels wide, 10.33 seconds and 37,765
+bytes. Frames from its beginning and final result are inspected for private data.
+
+<video controls src="https://raw.githubusercontent.com/StevenJPx2/atelier/main/docs/media/slice-0.mp4" width="1600"></video>
+
+[Watch the recording](https://raw.githubusercontent.com/StevenJPx2/atelier/main/docs/media/slice-0.mp4).
 
 ## What it builds
 
@@ -118,16 +132,29 @@ tap job pass and the owner's local install reports the candidate version.
 
 ## End to end
 
-1. Run the full local gates and package the release binary.
-2. Open a pull request and wait for every Check job to pass.
-3. Obtain the owner's approval to merge and cut `0.1.0-rc.2`.
-4. Bump the workspace version, regenerate the lockfile, commit with
-   `chore(release): 0.1.0-rc.2`, and wait for Check to pass.
-5. Obtain the owner's approval for `v0.1.0-rc.2` and push the tag.
-6. Watch all native builds and the GitHub release finish; the owner approves
-   the protected tap job.
-7. Install with `brew install StevenJPx2/taps/atelier`, run `brew test`, and
-   confirm `atelier --version` prints `atelier 0.1.0-rc.2`.
+- [Pull request #8](https://github.com/StevenJPx2/atelier/pull/8) and
+  [the formula regression test](https://github.com/StevenJPx2/atelier/pull/9)
+  pass the pull-request gates.
+- [The release commit's Check run](https://github.com/StevenJPx2/atelier/actions/runs/43021461460)
+  passes formatting, lint, tests, MSRV and packaged smoke checks.
+- [The candidate release](https://github.com/StevenJPx2/atelier/releases/tag/v0.1.0-rc.2)
+  contains three native archives and SHA256SUMS.
+- [The complete Release run](https://github.com/StevenJPx2/atelier/actions/runs/43021654905)
+  passes all three native builds and smoke tests, then the owner-approved tap
+  job: style, strict online audit, install, test and formula publication.
+- The local Apple Silicon install through `StevenJPx2/taps/atelier` reports
+  `atelier 0.1.0-rc.2`; `brew test --verbose StevenJPx2/taps/atelier` exits 0.
+  Linux binaries are smoke-tested on their native CI runners; a Linux Homebrew
+  install is not part of the local proof.
+- `brew services info atelier --json` reports `running: false` and
+  `loaded: false`. Its command is `atelier daemon`, with logs in Homebrew's
+  `var/log/atelier.log`.
+- Eight Mermaid fences across the changed Markdown pages render in GitHub's
+  actual preview. The recording's codec, width and size are checked by ffprobe.
+
+Local Homebrew's RuboCop plugin emits an upstream obsolete-configuration warning
+about `IgnoredPatterns`. No formula offense is reported, and no warning is
+suppressed. The protected CI style and strict online audit gates pass.
 
 Slice 1 waits for the owner's review of this candidate. No service or builder
 starts as part of slice 0's proof.

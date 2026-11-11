@@ -28,7 +28,7 @@ sequenceDiagram
     PR-->>Builder: failed check, via sourcefed
     Builder->>PR: fix and push
     PR-->>Builder: every check passes
-    Builder->>Critic: review this
+    Atelier->>Critic: every check passed: review it
     Critic->>PR: findings with evidence
     Builder->>PR: fix, record, mark ready
     PR-->>You: ready for review
@@ -53,7 +53,7 @@ own filter.
 flowchart TB
     CLI["crates/cli<br/>atelier binary"] --> GitHub["plugins/github<br/>Tracker, Forge"]
     CLI --> OpenCode["plugins/opencode<br/>Agent"]
-    CLI --> Langs["plugins/rust, tla, typescript<br/>Language"]
+    CLI --> Langs["plugins/rust, tla, typescript<br/>Checks"]
     CLI --> Git["crates/git<br/>Worktrees"]
     GitHub --> Core["crates/core<br/>issue machine, traits"]
     OpenCode --> Core
@@ -61,12 +61,13 @@ flowchart TB
     Git --> Core
 ```
 
-| Role     | Does                                     | Plugins                     |
-| -------- | ---------------------------------------- | --------------------------- |
-| Tracker  | Finds, marks and closes issues           | `github`                    |
-| Forge    | Pull requests, checks, how CI runs gates | `github`                    |
-| Agent    | Starts and stops builders and critics    | `opencode`                  |
-| Language | Finds its roots; names their gates       | `rust`, `tla`, `typescript` |
+| Role    | Does                                     | Plugins                     |
+| ------- | ---------------------------------------- | --------------------------- |
+| Tracker | Finds, marks and closes issues           | `github`                    |
+| Forge   | Pull requests, checks, how CI runs gates | `github`                    |
+| Agent   | Starts and stops builders and critics    | `opencode`                  |
+| Checks  | Finds its roots; names gates and fixes   | `rust`, `tla`, `typescript` |
+| Stage   | Runs after every check, before ready     | `critic`, `recording`       |
 
 Every plugin lives in this repository and ships in the release; atelier loads no
 code at run time.
@@ -76,11 +77,11 @@ code at run time.
 atelier finds a project's languages, and where each lives, by itself. Each language
 plugin finds its roots, the directories its gates run in, so one repository can
 hold Rust in one directory and TLA+ specs in another, each with its own gates.
-Language plugins name the gates; the forge plugin defines how its CI runs them.
+Checks plugins name the gates; the forge plugin defines how its CI runs them.
 
 ```mermaid
 flowchart LR
-    Lang["Language plugins<br/>roots and their gates"] --> Forge["Forge plugin<br/>writes its CI"]
+    Lang["Checks plugins<br/>roots and their gates"] --> Forge["Forge plugin<br/>writes its CI"]
     Forge --> CI["Forge CI<br/>one job per gate"]
     CI -- "atelier check --gate" --> Check["the gate's command"]
     Check -- "pass or fail" --> PR["a check on<br/>the pull request"]
@@ -110,6 +111,25 @@ The gates follow the code-discipline policy, one check each:
   vendored anti-slop plugin and no warnings, `tsgo -b`, Effect diagnostics when
   it uses Effect, its tests, `fallow audit`, and the package manager's audit,
   after a frozen install.
+
+## Adding a step
+
+Every step between a commit and a ready pull request comes from a plugin, and each
+project picks the ones it wants: fixes run in a commit hook, checks run in CI, and
+stages run in order once every check passes. Language plugins are found; other
+checks and every stage are named in the config. Chauffeur has a docs site, so it
+adds the `docs` check, which builds the site and fails on a dead link or a diagram
+that does not render; atelier, with no site, leaves it out:
+
+```toml
+# Chauffeur's .atelier/config.toml
+base = "v2"
+checks = ["docs"]
+stages = ["critic", "recording"]
+```
+
+A new step is a new plugin and a line in the projects that want it; core runs
+stages by position and limit, and knows none by name.
 
 ## An issue's states
 
@@ -167,7 +187,7 @@ labels = ["backend"] # atelier:build issues also labelled backend
 red_rounds = 5      # failed CI rounds before the builder stops, the default
 
 [paths."vendor"]
-languages = []      # nothing under vendor/ is checked
+checks = []         # nothing under vendor/ is checked
 ```
 
 A filter narrows which `atelier:build` issues atelier takes, by `assignee`,

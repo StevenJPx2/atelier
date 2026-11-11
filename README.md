@@ -69,15 +69,16 @@ loads no code at run time.
 
 ## Gates
 
-`atelier check` runs every gate of the project's languages, the same way for the
-builder before each push and in CI, where `gates.yml` runs one job per gate.
+Gates run in CI. On every push to a pull request, `gates.yml` runs `atelier check`
+once per gate of the project's languages, each as its own check. The builder never
+runs them: a failed gate reaches it as a failed check, through sourcefed.
 
 ```mermaid
 flowchart LR
-    Config[".atelier/config.toml<br/>languages"] --> Check["atelier check"]
+    Push["push to the<br/>pull request"] --> CI["gates.yml<br/>one job per gate"]
+    CI --> Check["atelier check --gate"]
     Plugins["rust and tla plugins<br/>gates as commands"] --> Check
-    Check --> Local["the builder<br/>before each push"]
-    Check --> CI["gates.yml<br/>one job per gate"]
+    Check --> Run["a check run<br/>on the pull request"]
 ```
 
 - **rust**: fmt, Clippy with `-D warnings`, nextest, doc tests, cargo-mutants on

@@ -1,0 +1,20 @@
+#!/bin/sh
+# A stand-in opencode for atelier's CLI tests: replies are what OpenCode
+# v2.2.7 printed (plugins/opencode/tests/opencode/fixtures). A file named
+# refuse beside it makes every new session fail as a 4xx does.
+here=$(dirname "$0")
+printf '%s\n' "$*" >> "$here/opencode-calls.log"
+fixtures="$here/opencode-fixtures"
+
+case "$2 $3" in
+  "post /api/session")
+    if [ -f "$here/refuse" ]; then
+      cat "$fixtures/session-not-found.json"
+      echo "HTTP 400 Bad Request" >&2
+      exit 1
+    fi
+    cat "$fixtures/session-created.json" ;;
+  "post "*/prompt) echo '{"data":{}}' ;;
+  "post "*/interrupt) cat "$fixtures/interrupted-idle.json" ;;
+  *) echo '{}' ;;
+esac

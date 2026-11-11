@@ -12,7 +12,13 @@ $platforms
   end
 
   def caveats
-    "The issue loop and daemon are planned for slice 1; do not start the service yet."
+    <<~EOS
+      In a project's checkout, make its labels and watch it:
+        atelier init
+        atelier add owner/name
+      then keep the daemon running:
+        brew services start atelier
+    EOS
   end
 
   service do

@@ -3,9 +3,9 @@
 **Status: In progress.** The core is built: the issue machine and its Kani
 proofs, the poll's events, `observe` and `act`, the roles and the registry.
 So are `crates/git`, the `github` plugin
-([#6](https://github.com/StevenJPx2/atelier/issues/6)) and the `opencode`
-plugin ([#7](https://github.com/StevenJPx2/atelier/issues/7)). Then the CLI
-and daemon.
+([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode`
+plugin ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI
+and daemon. Then the end-to-end run.
 
 You can label an issue `atelier:build` in a watched project and, within a
 poll, find a builder working on it in its own worktree. It opens a draft pull
@@ -763,9 +763,146 @@ cargo nextest run -p atelier-opencode --run-ignored only
 
 ### The CLI and daemon (`crates/cli`)
 
-Planned: `atelier init`, `add`, `daemon` and `status`, as
-[the plan](https://github.com/StevenJPx2/atelier/issues/1#slice-1-the-loop)
-describes.
+The `atelier` binary: `init`, `add`, `daemon` and `status`. Each watched
+project polls on its own thread; one writer owns `state.json`; a lock lets
+one daemon run.
+
+Files: [`crates/cli/`](../../../crates/cli/README.md).
+
+```sh
+atelier init
+# StevenJPx2/chauffeur: labels atelier:build, atelier:working, atelier:blocked, improvement
+
+atelier add StevenJPx2/chauffeur
+# watching StevenJPx2/chauffeur at /Users/me/Documents/Projects/chauffeur
+
+atelier status
+# StevenJPx2/chauffeur  /Users/me/Documents/Projects/chauffeur
+#   base        v2                       set
+#   trackers    github                   found
+#   forge       github                   found
+#   agent       the only one             found
+#   red_rounds  5                        found
+#   poll        30 s                     found
+#   github#12   Building                 issue-12-fix-the-dead-link  ses_…
+```
+
+#### Structure
+
+The project's config is read from `origin`: its default branch for `base`,
+and `origin/<base>` for the rest, so a branch cannot change its limits. Each
+setting has a default found from the checkout: the tracker and forge from
+`origin`'s host, the only agent in the build, `red_rounds` 5, `poll` 30 s
+(at least 15). A `[[tracker]]` entry's `plugin` and `filter` are atelier's;
+the rest are the plugin's settings. Your filter in `projects.toml` and the
+project's both apply; two different assignees or authors are refused. Checks
+and stages are refused by name until their plugins exist.
+
+```rust
+pub enum Origin { Found, Set }
+
+pub struct TrackerSpec {
+    pub plugin: String,
+    pub filter: atelier_core::Filter,
+    pub settings: Settings,
+}
+
+pub struct Resolved {
+    pub project: Project,
+    pub trackers: Vec<TrackerSpec>,
+    pub forge: String,
+    pub agent: Option<String>,
+    pub poll: Duration,
+    pub shown: Vec<(&'static str, String, Origin)>,
+}
+
+pub fn resolve(entry: &Entry, checkout: &Checkout) -> Result<Resolved>;
+pub fn settings(table: toml::Table) -> Result<Settings>;
+pub fn platform(url: &str) -> Result<&'static str>;
+pub fn repo_from_url(url: &str) -> Option<String>;
+```
+
+Your projects, with your own filter for each tracker by plugin name. `add`
+appends to the file and leaves the rest as written.
+
+```rust
+pub struct Entry {
+    pub repo: String,
+    pub path: PathBuf,
+    pub filter: BTreeMap<String, Filter>,
+}
+
+pub struct Filter {
+    pub assignee: Option<String>,
+    pub author: Option<String>,
+    pub labels: Vec<String>,
+    pub query: Option<String>,
+}
+
+impl Filter {
+    pub fn and(&self, yours: &Self) -> Result<atelier_core::Filter>;
+}
+
+pub fn read(path: &Path) -> Result<Vec<Entry>>;
+pub fn add(path: &Path, repo: &str, checkout: &Path) -> Result<()>;
+```
+
+`Build` holds one instance of each plugin crate; `plugins` builds a project's
+trackers from their settings and finds its forge and agent by name. Two
+trackers from one plugin are refused, since issue keys name the plugin.
+
+```rust
+pub struct Build {
+    github: GitHub,
+    opencode: OpenCode,
+}
+
+impl Build {
+    pub fn new() -> Self;
+    pub fn plugins(&self, resolved: &Resolved) -> Result<Built<'_>>;
+}
+
+impl Built<'_> {
+    pub fn plugins<'b>(&'b self, git: &'b Git) -> Plugins<'b>;
+}
+```
+
+The daemon. The supervisor rereads `projects.toml` every 30 s, starting a
+thread for each new project and stopping one removed. A project's thread
+polls every `poll` seconds, 5 s after acting, and on failure backs off as
+long as a rate limit asks, otherwise 30 s doubling to 10 minutes. Each save
+goes to the writer through a queue of 16 and waits up to 30 s for the file to
+be written, so a phase is on disk before its actions run. `state.json` is
+written to a temporary file and renamed. The lock holds the daemon's process
+id, and a second daemon exits naming it.
+
+```rust
+pub fn run(paths: &Paths) -> Result<()>;
+
+pub fn take(path: &Path) -> Result<File>;
+
+pub struct Writer(SyncSender<Message>);
+
+impl Writer {
+    pub fn save(&self, repo: &str, state: &State) -> Result<()>;
+    pub fn load(&self, repo: &str) -> Result<State>;
+}
+
+pub fn spawn(entry: Entry, paths: Paths, writer: Writer, stop: Arc<AtomicBool>) -> Result<JoinHandle<()>>;
+```
+
+#### Verification
+
+Tests run the real binary with real git, a real `origin` reached as
+`https://github.com/StevenJPx2/demo.git` through git's `insteadOf`, and
+stand-ins for `gh` and `opencode` first on `PATH`, built from their captured
+replies; the `gh` stand-in keeps each issue's labels. A labelled issue gets
+one builder across polls and a restart, on its own branch, with one comment,
+and `status` shows it; a second daemon refuses to start, naming the first;
+an issue assigned to someone else is left alone under your filter; a builder
+that cannot start blocks its issue; a plugin the build lacks fails that
+project by name; `init` makes the labels the project sets; `add` refuses
+another repository and a second add.
 
 ## End to end
 

@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""A stand-in gh for atelier's CLI tests.
+
+It keeps issues and their labels in world.json beside it, answers the REST
+and GraphQL calls the github plugin makes with replies shaped as GitHub's
+captured ones (plugins/github/tests/github/fixtures), and records each call
+in calls.jsonl.
+"""
+
+import json
+import pathlib
+import sys
+import urllib.parse
+
+HERE = pathlib.Path(__file__).resolve().parent
+WORLD = HERE / "world.json"
+FIXTURES = HERE / "fixtures"
+
+
+def reply(status, body, headers=()):
+    lines = [f"HTTP/2.0 {status}"]
+    lines += [f"{name}: {value}" for name, value in headers]
+    sys.stdout.write("\r\n".join(lines) + "\r\n\r\n" + json.dumps(body))
+    sys.exit(0 if status.startswith("2") else 1)
+
+
+def issue(number, data):
+    raw = json.loads((FIXTURES / "issue-6.json").read_text())
+    raw.update(number=int(number), title=data["title"], state=data["state"])
+    raw["labels"] = [{"name": name} for name in data["labels"]]
+    raw["assignee"] = {"login": data["assignee"]} if data.get("assignee") else None
+    return raw
+
+
+def listing(world, query):
+    wanted = query.get("labels", [""])[0].split(",")
+    assignee = query.get("assignee", [None])[0]
+    found = [
+        issue(number, data)
+        for number, data in world["issues"].items()
+        if data["state"] == "open"
+        and all(label in data["labels"] for label in wanted)
+        and (assignee is None or data.get("assignee") == assignee)
+    ]
+    reply("200 OK", found)
+
+
+def main():
+    args = sys.argv[1:]
+    with (HERE / "calls.jsonl").open("a") as calls:
+        calls.write(json.dumps(args) + "\n")
+
+    world = json.loads(WORLD.read_text())
+
+    if args[:2] == ["label", "create"]:
+        sys.exit(0)
+
+    method, fields, path = "GET", {}, None
+    rest = args[2:]
+    while rest:
+        arg = rest.pop(0)
+        if arg == "--method":
+            method = rest.pop(0)
+        elif arg == "--raw-field":
+            key, _, value = rest.pop(0).partition("=")
+            fields[key] = value
+        elif arg == "--header":
+            rest.pop(0)
+        else:
+            path = arg
+
+    if path == "graphql":
+        reply("200 OK", {"data": {"repository": {"pullRequests": {"nodes": []}}}})
+
+    url = urllib.parse.urlsplit(path)
+    parts = url.path.split("/")
+
+    if parts[-1] == "issues":
+        listing(world, urllib.parse.parse_qs(url.query))
+
+    number = parts[4]
+    data = world["issues"][number]
+
+    if method == "POST" and parts[-1] == "labels":
+        data["labels"] = sorted(set(data["labels"]) | {fields["labels[]"]})
+    elif method == "DELETE":
+        label = urllib.parse.unquote(parts[-1])
+        if label not in data["labels"]:
+            reply("404 Not Found", {"message": "Label does not exist"})
+        data["labels"].remove(label)
+    elif method == "POST" and parts[-1] == "comments":
+        data.setdefault("comments", []).append(fields["body"])
+    elif method == "PATCH":
+        data["state"] = fields["state"]
+
+    WORLD.write_text(json.dumps(world, indent=2))
+    reply("200 OK", issue(number, data))
+
+
+main()

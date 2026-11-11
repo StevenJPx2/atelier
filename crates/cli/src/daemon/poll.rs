@@ -157,18 +157,24 @@ mod tests {
         );
     }
 
+    /// Waits on another thread with a bound, so a wait that never ends
+    /// fails the test instead of hanging it.
+    fn timed(wait: Duration, stop: bool) -> Option<Duration> {
+        let (done, finished) = std::sync::mpsc::channel();
+
+        thread::spawn(move || {
+            let started = Instant::now();
+            sleep(wait, &AtomicBool::new(stop));
+            let _ = done.send(started.elapsed());
+        });
+
+        finished.recv_timeout(Duration::from_secs(3)).ok()
+    }
+
     #[test]
     fn a_wait_lasts_its_time_unless_told_to_stop() {
-        let running = AtomicBool::new(false);
-        let stopped = AtomicBool::new(true);
-
-        let started = Instant::now();
-        sleep(Duration::from_millis(600), &running);
-        let waited = started.elapsed();
-
-        let started = Instant::now();
-        sleep(Duration::from_secs(5), &stopped);
-        let cut = started.elapsed();
+        let waited = timed(Duration::from_millis(600), false).expect("the wait ended");
+        let cut = timed(Duration::from_secs(5), true).expect("the stopped wait ended");
 
         assert!(
             waited >= Duration::from_millis(600) && waited < Duration::from_secs(2),

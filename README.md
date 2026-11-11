@@ -1,5 +1,9 @@
 # atelier
 
+**Status: slice 0 in progress.** The binary supports `--version` and `--help`.
+The factory below is the approved design; the daemon and issue loop are
+planned for slice 1. See the [slice index](docs/plans/README.md).
+
 A personal software factory. You plan a feature as a GitHub issue and add the
 `atelier:build` label. atelier starts a builder agent in its own worktree, which
 opens a pull request and works until every check passes, a critic agent finds
@@ -36,7 +40,8 @@ sequenceDiagram
 
 The checks decide when the work is done. The agent does not judge it, and no
 rulebook or skill has to be followed: a builder knows its issue, the project's
-`AGENTS.md` and the contract in [`prompts/builder.md`](prompts/builder.md).
+`AGENTS.md` and the contract in
+[the builder's brief](https://github.com/StevenJPx2/atelier/issues/1#the-builders-brief).
 
 ## A core and its plugins
 

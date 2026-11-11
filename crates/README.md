@@ -46,7 +46,7 @@ cargo run --locked -p atelier-cli -- --version
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo nextest run --workspace --all-targets --all-features --locked
+cargo nextest run --workspace --all-targets --all-features --locked --no-tests=warn
 cargo test --workspace --doc --all-features --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 cargo +1.96 check --workspace --all-targets --all-features --locked

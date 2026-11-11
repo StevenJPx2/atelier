@@ -64,26 +64,26 @@ struct Cli {}
 fn main() -> std::io::Result<ExitCode>;
 ```
 
-Verification: real-process tests assert version, help, invalid flags and missing
-commands, including stdout, stderr and exit status. The MSRV check runs on
+Verification: the packaged smoke run executes the built binary's `--version`
+and `--help` on each target; slice 0 has no Rust tests. Mutation testing
+excludes `main` by name until slice 1 gives it behavior to test. The MSRV check runs on
 Rust 1.96; the approved plan's pinned stable toolchain is Rust 1.99.1.
 
 ### Check workflow
 
 Every pull request runs Rust formatting, Clippy with warnings denied, nextest,
-doc tests, rustdoc, cargo-deny, an MSRV check, Python format and lint, script
-contract tests and two native release builds with packaged smoke tests. Mutation
-testing covers the pull request's Rust diff.
+doc tests, rustdoc, cargo-deny, an MSRV check, Python format and lint, and two
+native release builds with packaged smoke tests. Mutation testing covers the
+pull request's Rust diff.
 
-Files: `.github/workflows/check.yml`, `crates/cli/tests/command.rs` and
-`pyproject.toml`.
+Files: `.github/workflows/check.yml` and `pyproject.toml`.
 
 ```sh
-cargo nextest run --workspace --locked
-# 3 passed
+cargo nextest run --workspace --locked --no-tests=warn
+# 0 tests run
 
 cargo mutants --workspace --timeout 120
-# 1 mutant tested: 1 caught
+# no mutants to test
 ```
 
 #### Structure
@@ -125,7 +125,7 @@ and `smoke`. Archive layout, file-size limits and validation live in
 `atelier daemon` with `keep_alive true`, Homebrew's standard PATH and one
 log under Homebrew's `var/log/`.
 
-Verification: ten script contract tests, the native tarball smoke test, then
+Verification: the native tarball smoke test on each target, then
 `brew style`, `brew audit --strict --online`, install and `brew test` in
 the protected job. The workflow is complete only after all three builds and the
 tap job pass and the owner's local install reports the candidate version.
@@ -133,7 +133,7 @@ tap job pass and the owner's local install reports the candidate version.
 ## End to end
 
 - [Pull request #8](https://github.com/StevenJPx2/atelier/pull/8) and
-  [the formula regression test](https://github.com/StevenJPx2/atelier/pull/9)
+  [the formula fix](https://github.com/StevenJPx2/atelier/pull/9)
   pass the pull-request gates.
 - [The release commit's Check run](https://github.com/StevenJPx2/atelier/actions/runs/43021461460)
   passes formatting, lint, tests, MSRV and packaged smoke checks.

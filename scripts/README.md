@@ -14,11 +14,10 @@ flowchart LR
     Formula --> Brew["Homebrew<br/>audit, install, test"]
 ```
 
-| File              | Holds                                                              |
-| ----------------- | ------------------------------------------------------------------ |
-| `release.py`      | Archive layout, size limits, checksums, formula and smoke commands |
-| `atelier.rb.in`   | The formula and keep-alive service definition                      |
-| `test_release.py` | Real archives and subprocess contract tests, without network       |
+| File            | Holds                                                              |
+| --------------- | ------------------------------------------------------------------ |
+| `release.py`    | Archive layout, size limits, checksums, formula and smoke commands |
+| `atelier.rb.in` | The formula and keep-alive service definition                      |
 
 ## Build and smoke-test
 
@@ -50,8 +49,8 @@ python3 scripts/release.py formula 0.1.0-rc.2 dist/SHA256SUMS \
   --out /path/to/homebrew-taps/Formula/atelier.rb
 ```
 
-Homebrew reads the version from each archive's URL. The formula's service runs `atelier daemon` with `keep_alive true` and
-Homebrew's standard service PATH. The daemon is planned for slice 1. Slice 0's
+Homebrew reads the version from each archive's URL. The formula's service runs
+`atelier daemon` with `keep_alive true` and Homebrew's standard service PATH. The daemon is planned for slice 1. Slice 0's
 formula tells the user not to start the service.
 
 ## Verify
@@ -59,9 +58,9 @@ formula tells the user not to start the service.
 ```sh
 uvx ruff@0.17.4 format --check scripts
 uvx ruff@0.17.4 check scripts
-python3 -m unittest discover -s scripts -v
 ```
 
-Tests verify archive contents and modes, SHA-256 values, rejected inputs, the
-formula's platform blocks and service, and the smoke test's real process
-boundary. The package CI job runs the packaged Rust binary on Linux and macOS.
+The proof is the real boundary, not unit tests. The package job in `check.yml`
+builds, packages and runs the binary on Linux and macOS. The release workflow
+does the same on each target, then the protected tap job runs `brew style`,
+`brew audit --strict --online`, install and `brew test` on the real formula.

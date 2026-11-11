@@ -30,12 +30,11 @@ The right pane shows the real Homebrew test executing that installed binary;
 the shell reports exit status 0. Slice 0 has no daemon or model session.
 
 The terminal-control capture runs in a scratch repository with isolated XDG
-configuration and state. It is H.264, 1600 pixels wide, 10.33 seconds and 37,765
-bytes. Frames from its beginning and final result are inspected for private data.
+configuration and state. The GIF is 1600 pixels wide, 10.4 seconds and 162 KB;
+it links to the H.264 original. Frames from its beginning and final result are
+inspected for private data.
 
-<video controls src="https://raw.githubusercontent.com/StevenJPx2/atelier/main/docs/media/slice-0.mp4" width="1600"></video>
-
-[Watch the recording](https://raw.githubusercontent.com/StevenJPx2/atelier/main/docs/media/slice-0.mp4).
+[![The installed candidate prints its version and help; brew test passes](../../media/slice-0.gif)](../../media/slice-0.mp4)
 
 ## What it builds
 

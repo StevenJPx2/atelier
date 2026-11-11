@@ -44,9 +44,9 @@ The core is the issue machine and the agent orchestrator: it sees issues, decide
 what happens to each (claim, start, stop, block, close), and starts an agent as the
 project's config says. It knows no programming language, issue tracker, forge or
 agent. Plugins do, each a Rust crate in this repository, compiled into the one
-`atelier` binary. One crate can be several kinds: `plugins/github` is both the
-tracker and the forge, and a project with its issues in Jira pairs a `jira`
-tracker with the `github` forge.
+`atelier` binary. Each plugin registers the kinds it provides: `plugins/github`
+is both the tracker and the forge, and a project with its issues in Jira pairs a
+`jira` tracker with the `github` forge.
 
 ```mermaid
 flowchart TB

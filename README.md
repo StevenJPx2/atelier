@@ -42,12 +42,15 @@ rulebook or skill has to be followed: a builder knows its issue, the project's
 
 The core is the issue machine and the agent orchestrator: it sees issues, decides
 what happens to each (claim, start, stop, block, close), and starts an agent as the
-project's config says. It knows no programming language, forge or agent. Plugins
-do, each a Rust crate in this repository, compiled into the one `atelier` binary.
+project's config says. It knows no programming language, issue tracker, forge or
+agent. Plugins do, each a Rust crate in this repository, compiled into the one
+`atelier` binary. One crate can be several kinds: `plugins/github` is both the
+tracker and the forge, and a project with its issues in Jira pairs a `jira`
+tracker with the `github` forge.
 
 ```mermaid
 flowchart TB
-    CLI["crates/cli<br/>the atelier binary"] --> GitHub["plugins/github<br/>Forge"]
+    CLI["crates/cli<br/>atelier binary"] --> GitHub["plugins/github<br/>Tracker, Forge"]
     CLI --> OpenCode["plugins/opencode<br/>Agent"]
     CLI --> Langs["plugins/rust, plugins/tla<br/>Language"]
     CLI --> Git["crates/git<br/>Worktrees"]
@@ -57,11 +60,12 @@ flowchart TB
     Git --> Core
 ```
 
-| Kind     | Does                                         | Plugins       |
-| -------- | -------------------------------------------- | ------------- |
-| Forge    | Issues, labels, pull requests, checks and CI | `github`      |
-| Agent    | Starts and stops a builder or critic session | `opencode`    |
-| Language | Finds itself in a project; names its gates   | `rust`, `tla` |
+| Kind     | Does                                           | Plugins       |
+| -------- | ---------------------------------------------- | ------------- |
+| Tracker  | Finds, reads, marks and closes issues          | `github`      |
+| Forge    | Pull requests, checks, and how gates run in CI | `github`      |
+| Agent    | Starts and stops a builder or critic session   | `opencode`    |
+| Language | Finds itself in a project; names its gates     | `rust`, `tla` |
 
 An external plugin is named by `owner/repo@sha` and joins the binary as a pinned
 Git dependency of this workspace, reviewed and released like any other. atelier
@@ -69,8 +73,9 @@ loads no code at run time.
 
 ## Gates
 
-Gates run in CI. On every push to a pull request, `gates.yml` runs `atelier check`
-once per gate of the project's languages, each as its own check. The builder never
+Language plugins name the gates; the forge plugin defines how they run in its CI.
+On GitHub, on every push to a pull request, `gates.yml` runs `atelier check` once
+per gate of the project's languages, each as its own check. The builder never
 runs them: a failed gate reaches it as a failed check, through sourcefed.
 
 ```mermaid
@@ -114,16 +119,17 @@ branch and pull request.
 
 ## What lives where
 
-| atelier holds                  | A project holds                                 |
-| ------------------------------ | ----------------------------------------------- |
-| The core, plugins and CLI      | `.atelier/config.toml`: base, plugins, limits   |
-| The builder and critic prompts | `AGENTS.md`: how to build, test and record it   |
-| The reusable `gates.yml`       | `.github/workflows/atelier.yml`, which calls it |
-| The pull request template      |                                                 |
+| atelier holds              | A project holds                                 |
+| -------------------------- | ----------------------------------------------- |
+| Core, plugins, CLI         | `.atelier/config.toml`: base, plugins, limits   |
+| Builder and critic prompts | `AGENTS.md`: how to build, test and record it   |
+| `gates.yml`, from `github` | `.github/workflows/atelier.yml`, which calls it |
+| The pull request template  |                                                 |
 
 ```toml
 # .atelier/config.toml
 base = "v2"
+tracker = "github"
 forge = "github"
 agent = "opencode"
 languages = ["rust", "tla"]

@@ -14,4 +14,5 @@ this repository, except where a row says otherwise.
 | `pull-open.txt`             | The query for `feat/git-worktrees`: #12, open, its one commit passing                              |
 | `pull-none.txt`             | The query for a branch with no pull request                                                        |
 | `pull-open-failed-once.txt` | **Derived** from `pull-merged.txt`, with #8 open and a draft                                       |
+| `forbidden.txt`             | `POST repos/cli/cli/issues/1/labels` without the rights: a 403 that is no rate limit               |
 | `rate-limited.txt`          | **Constructed** from GitHub's documented rate-limit reply                                          |

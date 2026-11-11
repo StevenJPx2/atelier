@@ -158,3 +158,66 @@ pub fn encode(text: &str) -> String {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reply(status: u16, headers: &[(&str, &str)]) -> Reply {
+        let headers = headers
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()));
+        Reply {
+            status,
+            headers: headers.collect(),
+            body: String::new(),
+        }
+    }
+
+    #[test]
+    fn github_s_limits_wait_its_server_errors_retry_and_other_errors_stop() {
+        let cases = [
+            (
+                reply(429, &[]),
+                Failure::RateLimited {
+                    retry_after_secs: 60,
+                },
+            ),
+            (
+                reply(429, &[("Retry-After", "7")]),
+                Failure::RateLimited {
+                    retry_after_secs: 7,
+                },
+            ),
+            (
+                reply(403, &[("Retry-After", "30")]),
+                Failure::RateLimited {
+                    retry_after_secs: 30,
+                },
+            ),
+            (
+                reply(403, &[("X-Ratelimit-Remaining", "0")]),
+                Failure::RateLimited {
+                    retry_after_secs: 60,
+                },
+            ),
+            (
+                reply(403, &[("X-Ratelimit-Remaining", "4996")]),
+                Failure::Permanent,
+            ),
+            (reply(404, &[("Retry-After", "30")]), Failure::Permanent),
+            (reply(502, &[]), Failure::Transient),
+            (reply(499, &[]), Failure::Permanent),
+        ];
+
+        for (reply, failure) in cases {
+            let status = reply.status;
+
+            assert_eq!(reply.ok("call").unwrap_err().failure, failure, "{status}");
+        }
+
+        for status in [200, 204, 299, 304] {
+            assert!(reply(status, &[]).ok("call").is_ok(), "{status}");
+        }
+    }
+}

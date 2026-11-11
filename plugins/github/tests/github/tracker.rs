@@ -1,5 +1,7 @@
 use atelier_core::{Failure, Filter, Listing, Mark, Repo, Tracker};
+use atelier_github::LABELS;
 
+use crate::stand_in::Reply::{Captured, Done, Unreachable};
 use crate::stand_in::StandIn;
 
 fn repo() -> Repo {
@@ -17,7 +19,7 @@ fn ids(listing: &Listing) -> Vec<&str> {
 
 #[test]
 fn one_page_keeps_its_tag_and_an_unchanged_repository_answers_304() {
-    let gh = StandIn::new(&[Some("issues-page-2.txt"), Some("issues-304.txt")]);
+    let gh = StandIn::new(&[Captured("issues-page-2.txt"), Captured("issues-304.txt")]);
     let github = gh.github();
 
     let first = github
@@ -40,7 +42,10 @@ fn one_page_keeps_its_tag_and_an_unchanged_repository_answers_304() {
 
 #[test]
 fn pages_are_followed_pull_requests_dropped_and_no_tag_kept() {
-    let gh = StandIn::new(&[Some("issues-with-pulls.txt"), Some("issues-page-2.txt")]);
+    let gh = StandIn::new(&[
+        Captured("issues-with-pulls.txt"),
+        Captured("issues-page-2.txt"),
+    ]);
 
     let listing = gh
         .github()
@@ -54,7 +59,7 @@ fn pages_are_followed_pull_requests_dropped_and_no_tag_kept() {
 
 #[test]
 fn a_filter_narrows_the_listing_by_mark_assignee_author_and_labels() {
-    let gh = StandIn::new(&[Some("issues-page-2.txt")]);
+    let gh = StandIn::new(&[Captured("issues-page-2.txt")]);
     let filter = Filter {
         assignee: Some("StevenJPx2".into()),
         author: Some("someone else".into()),
@@ -75,7 +80,7 @@ fn a_filter_narrows_the_listing_by_mark_assignee_author_and_labels() {
 
 #[test]
 fn a_query_goes_through_search_with_no_tag() {
-    let gh = StandIn::new(&[Some("issues-page-2.txt")]);
+    let gh = StandIn::new(&[Captured("issues-page-2.txt")]);
     let filter = Filter {
         query: Some("milestone:v1".into()),
         ..Filter::default()
@@ -104,7 +109,7 @@ fn a_query_goes_through_search_with_no_tag() {
 
 #[test]
 fn an_issue_is_read_and_a_missing_one_is_a_permanent_failure() {
-    let gh = StandIn::new(&[Some("issue-6.txt"), Some("issue-404.txt")]);
+    let gh = StandIn::new(&[Captured("issue-6.txt"), Captured("issue-404.txt")]);
     let github = gh.github();
 
     let issue = github.issue(&repo(), "6").unwrap();
@@ -121,7 +126,7 @@ fn an_issue_is_read_and_a_missing_one_is_a_permanent_failure() {
 
 #[test]
 fn a_rate_limit_waits_and_an_unreachable_github_retries() {
-    let gh = StandIn::new(&[Some("rate-limited.txt"), None]);
+    let gh = StandIn::new(&[Captured("rate-limited.txt"), Unreachable]);
     let github = gh.github();
 
     let limited = github.issue(&repo(), "6").unwrap_err();
@@ -139,10 +144,10 @@ fn a_rate_limit_waits_and_an_unreachable_github_retries() {
 #[test]
 fn marks_comments_and_closing_change_the_issue_and_a_missing_label_is_no_failure() {
     let gh = StandIn::new(&[
-        Some("issue-6.txt"),
-        Some("issue-404.txt"),
-        Some("issue-6.txt"),
-        Some("issue-6.txt"),
+        Captured("issue-6.txt"),
+        Captured("issue-404.txt"),
+        Captured("issue-6.txt"),
+        Captured("issue-6.txt"),
     ]);
     let github = gh.github();
 
@@ -182,4 +187,39 @@ fn marks_comments_and_closing_change_the_issue_and_a_missing_label_is_no_failure
             "state_reason=completed"
         ]
     );
+}
+
+#[test]
+fn labels_are_made_once_each_and_a_refusal_stops_them() {
+    let gh = StandIn::new(&[Done, Done, Done, Done, Done, Unreachable]);
+    let github = gh.github();
+
+    github.create_labels(&repo()).unwrap();
+    let error = github.create_labels(&repo()).unwrap_err();
+
+    let calls = gh.calls();
+    assert_eq!(calls.len(), 6);
+    assert_eq!(
+        calls[0][..5],
+        ["label", "create", LABELS[0].0, "--force", "--repo"]
+    );
+    assert_eq!(calls[3][2], "improvement");
+    assert!(
+        error.message.contains("gh label create atelier:working"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_repository_that_is_not_owner_and_name_is_refused_before_any_call() {
+    let gh = StandIn::new(&[]);
+    let github = gh.github();
+
+    for name in ["atelier", "/atelier", "StevenJPx2/", "a/b/c"] {
+        let error = github.issues(&Repo(name.into()), Mark::Build, &Filter::default(), None);
+
+        assert!(error.unwrap_err().is_permanent(), "{name}");
+    }
+
+    assert_eq!(gh.calls().len(), 0);
 }

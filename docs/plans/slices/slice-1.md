@@ -605,11 +605,14 @@ A stand-in `gh` replays replies captured from GitHub, listed in
 one page keeps its tag and the same listing then answers 304; pages are
 followed, pull requests dropped and no tag kept; a filter becomes the query
 string; a query goes through search; a missing issue is permanent; a rate
-limit waits 60 seconds and an unreachable GitHub retries; marks, comments and
-closing send what GitHub expects; PR #8's real history reads as merged, and
-open with one failed round; the plugin registers under the name its issues
-carry. One test runs the same reads against the real GitHub when `gh` is
-signed in.
+limit waits 60 seconds, a refusal is final and an unreachable GitHub retries;
+marks, comments and closing send what GitHub expects; labels are made once
+each; a repository that is not `owner/name` is refused before any call; PR
+#8's real history reads as merged, and open with one failed round; the brief
+names GitHub's commands; the plugin registers under the name its issues carry.
+Unit tests read every status and every pull request state. One test runs the
+same reads against the real GitHub when `gh` is signed in; mutation testing
+runs with it skipped, as CI does.
 
 ### The `opencode` plugin
 

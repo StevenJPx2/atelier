@@ -24,14 +24,24 @@ for arg in "$@"; do printf '%s\n' "$arg"; done > "$dir/call-$n"
 exit "$(cat "$dir/exit-$n" 2>/dev/null || echo 0)"
 "#;
 
+/// What the stand-in prints for one call.
+#[derive(Clone, Copy)]
+pub enum Reply {
+    /// A captured reply, by its fixture's name; exits 1 unless it is a 2xx.
+    Captured(&'static str),
+    /// Nothing, and success, as `gh label create` prints when it works.
+    Done,
+    /// Nothing, and failure, as `gh` does when it cannot reach GitHub.
+    Unreachable,
+}
+
 pub struct StandIn {
     dir: PathBuf,
 }
 
 impl StandIn {
-    /// Replies in order, each a fixture's name; `None` prints nothing and
-    /// fails, as `gh` does when it cannot reach GitHub.
-    pub fn new(replies: &[Option<&str>]) -> Self {
+    /// Replies in order.
+    pub fn new(replies: &[Reply]) -> Self {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("atelier-gh-{}-{id}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -41,9 +51,16 @@ impl StandIn {
 
         for (index, reply) in replies.iter().enumerate() {
             let n = index + 1;
-            let Some(name) = reply else {
-                std::fs::write(dir.join(format!("exit-{n}")), "1").unwrap();
-                continue;
+            let name = match reply {
+                Reply::Captured(name) => *name,
+                Reply::Done => {
+                    std::fs::write(dir.join(format!("exit-{n}")), "0").unwrap();
+                    continue;
+                }
+                Reply::Unreachable => {
+                    std::fs::write(dir.join(format!("exit-{n}")), "1").unwrap();
+                    continue;
+                }
             };
             let text = std::fs::read_to_string(fixture(name)).unwrap();
             let ok = text.starts_with("HTTP/2.0 2");

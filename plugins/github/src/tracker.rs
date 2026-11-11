@@ -300,3 +300,25 @@ impl Tracker for GitHub {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atelier_s_labels_are_its_marks_and_others_are_ignored() {
+        let raw: Raw = serde_json::from_str(
+            r#"{"number": 12, "title": "Fix", "state": "closed", "pull_request": null,
+                "labels": [{"name": "atelier:working"}, {"name": "bug"}, {"name": "atelier:blocked"}]}"#,
+        )
+        .unwrap();
+
+        let issue = raw.issue().unwrap();
+
+        assert_eq!(
+            issue.marks,
+            Marks::default().with(Mark::Working).with(Mark::Blocked)
+        );
+        assert!(!issue.open);
+    }
+}

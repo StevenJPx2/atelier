@@ -156,3 +156,64 @@ impl Forge for GitHub {
         vec!["gh pr merge *".into(), "gh release *".into()]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pull(state: &str, rollups: &[Option<&str>]) -> PullRequest {
+        let commits = rollups
+            .iter()
+            .map(|rollup| {
+                let rollup = rollup.map_or_else(
+                    || "null".to_owned(),
+                    |state| format!(r#"{{"state": "{state}"}}"#),
+                );
+                format!(r#"{{"commit": {{"statusCheckRollup": {rollup}}}}}"#)
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let json = format!(
+            r#"{{"number": 3, "state": "{state}", "isDraft": false, "commits": {{"nodes": [{commits}]}}}}"#
+        );
+
+        serde_json::from_str::<Pull>(&json).unwrap().pull_request()
+    }
+
+    const fn open(failed_rounds: u8, checks: Checks) -> PullRequest {
+        PullRequest::Open {
+            number: 3,
+            draft: false,
+            failed_rounds,
+            checks,
+        }
+    }
+
+    #[test]
+    fn each_state_and_head_reads_as_core_expects() {
+        let cases = [
+            (
+                pull("CLOSED", &[Some("FAILURE")]),
+                PullRequest::Closed { number: 3 },
+            ),
+            (
+                pull("OPEN", &[Some("SUCCESS"), Some("FAILURE")]),
+                open(1, Checks::Failed),
+            ),
+            (
+                pull("OPEN", &[Some("ERROR"), Some("ERROR")]),
+                open(2, Checks::Failed),
+            ),
+            (
+                pull("OPEN", &[Some("FAILURE"), None]),
+                open(1, Checks::Pending),
+            ),
+            (pull("OPEN", &[Some("EXPECTED")]), open(0, Checks::Pending)),
+            (pull("OPEN", &[]), open(0, Checks::Pending)),
+        ];
+
+        for (found, expected) in cases {
+            assert_eq!(found, expected);
+        }
+    }
+}

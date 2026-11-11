@@ -36,7 +36,7 @@ Files: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `clippy.toml`,
 
 ```sh
 cargo run --locked -p atelier-cli -- --version
-# atelier 0.1.0
+# atelier 0.1.0-rc.1
 ```
 
 #### Structure

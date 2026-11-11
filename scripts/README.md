@@ -50,7 +50,7 @@ python3 scripts/release.py formula 0.1.0-rc.1 dist/SHA256SUMS \
   --out /path/to/homebrew-taps/Formula/atelier.rb
 ```
 
-The formula's service runs `atelier daemon` with `keep_alive true` and
+Homebrew reads the version from each archive's URL. The formula's service runs `atelier daemon` with `keep_alive true` and
 Homebrew's standard service PATH. The daemon is planned for slice 1. Slice 0's
 formula tells the user not to start the service.
 

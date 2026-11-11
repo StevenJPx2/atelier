@@ -92,6 +92,8 @@ flowchart LR
 specs  tla/tlc         pass     3 s   tick.tla
 ```
 
+Before each of the builder's commits, a hook atelier puts in its worktree runs
+`atelier fix`: formatting and lint fixes a tool can make land in the same commit.
 On a pull request, CI runs the gates of each root the diff touches. The builder
 never runs them: a failed gate reaches it as a failed check, through sourcefed.
 

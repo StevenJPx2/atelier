@@ -9,7 +9,7 @@ is yours to review.
 ```sh
 atelier init                         # in a project: labels and .atelier/config.toml
 atelier add StevenJPx2/chauffeur     # watch it
-brew services start atelier          # poll every minute
+brew services start atelier          # keep its daemon running
 gh issue edit 12 --add-label atelier:build
 ```
 
@@ -18,7 +18,7 @@ gh issue edit 12 --add-label atelier:build
 ```mermaid
 sequenceDiagram
     participant You
-    participant Atelier as atelier poller
+    participant Atelier as atelier daemon
     participant Builder as Builder agent
     participant PR as Pull request and CI
     participant Critic as Critic agent
@@ -139,11 +139,15 @@ branch and pull request.
 Every setting has a default found from the project: the base is the forge's
 default branch, the tracker and forge come from the `origin` remote, and the
 languages from their roots. The config holds only what differs. Chauffeur's is one
-line; another project might turn checks off under a path:
+line; another project might take only some issues, or turn checks off under a
+path:
 
 ```toml
 # .atelier/config.toml
 base = "v2"
+
+[filter]
+labels = ["backend"] # atelier:build issues also labelled backend
 
 [limits]
 red_rounds = 5      # failed CI rounds before the builder stops, the default
@@ -151,6 +155,10 @@ red_rounds = 5      # failed CI rounds before the builder stops, the default
 [paths."vendor"]
 languages = []      # nothing under vendor/ is checked
 ```
+
+A filter narrows which `atelier:build` issues atelier takes, by `assignee`,
+`author`, `labels` or the tracker's own query. Your own filter in
+`~/.config/atelier/projects.toml`, such as `assignee`, narrows it to your issues.
 
 ## Pull requests
 
@@ -167,7 +175,7 @@ Every pull request has the same sections, and a check fails when one is empty:
 
 Each loop ends. After `red_rounds` failed CI rounds or `critic_rounds` reviews,
 the builder comments on the pull request with what blocks it, labels the issue
-`atelier:blocked` and stops. The poller checks the same counts and stops a
+`atelier:blocked` and stops. The daemon checks the same counts and stops a
 builder that does not.
 
 ## Building atelier

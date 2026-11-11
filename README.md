@@ -94,14 +94,18 @@ specs  tla/tlc         pass     3 s   tick.tla
 On a pull request, CI runs the gates of each root the diff touches. The builder
 never runs them: a failed gate reaches it as a failed check, through sourcefed.
 
+The gates follow the code-discipline policy, one check each:
+
 - **rust**: a root is a Cargo workspace or a crate outside one. fmt, Clippy with
-  `-D warnings`, nextest, doc tests, cargo-mutants on the pull request's diff
-  (`--in-diff`), and Kani when a crate has proofs.
+  `-D warnings`, nextest, doc tests, rustdoc with `-D warnings`, cargo-deny,
+  cargo-mutants on the pull request's diff (`--in-diff`), and Kani when a crate
+  has proofs.
 - **tla**: a root is a directory with `*.tla` specs. TLC on each, in a project of
   any language.
 - **typescript**: a root is an npm, Bun or pnpm workspace, or a package outside
-  one. Its `check` script when it has one, as sourcefed's `npm run check`;
-  otherwise `tsc --noEmit` and its `build` and `test` scripts.
+  one. oxfmt, Oxlint with the vendored anti-slop plugin and no warnings, `tsc -b`,
+  Effect diagnostics when it uses Effect, its tests, `fallow audit`, and the
+  package manager's audit, after a frozen install.
 
 ## An issue's states
 

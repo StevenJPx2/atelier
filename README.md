@@ -67,9 +67,8 @@ flowchart TB
 | Agent    | Starts and stops a builder or critic session   | `opencode`    |
 | Language | Finds itself in a project; names its gates     | `rust`, `tla` |
 
-An external plugin is named by `owner/repo@sha` and joins the binary as a pinned
-Git dependency of this workspace, reviewed and released like any other. atelier
-loads no code at run time.
+Every plugin lives in this repository and ships in the release; atelier loads no
+code at run time.
 
 ## Gates
 

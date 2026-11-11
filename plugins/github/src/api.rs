@@ -1,12 +1,11 @@
 //! `gh api` with its reply's status and headers, so a 304, a missing issue
 //! and a rate limit each read as what they are.
 
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
 use atelier_core::{Failure, PluginError, Repo};
-
-use crate::GitHub;
 
 /// The longest one call to GitHub may take.
 const DEADLINE: Duration = Duration::from_secs(30);
@@ -78,31 +77,29 @@ impl Reply {
     }
 }
 
-impl GitHub {
-    /// Runs `gh api --include` with `args`, and reads its reply whatever
-    /// its status.
-    ///
-    /// # Errors
-    ///
-    /// `gh` cannot start, runs past its deadline, or prints no reply, such
-    /// as when it cannot reach GitHub; all transient.
-    pub(crate) fn api(&self, args: &[&str]) -> Result<Reply, PluginError> {
-        let mut command = Command::new(&self.program);
-        command
-            .args(["api", "--include"])
-            .args(args)
-            .env("GH_PROMPT_DISABLED", "1");
+/// Runs `gh api --include` with `args` through `program`, and reads its
+/// reply whatever its status.
+///
+/// # Errors
+///
+/// `gh` cannot start, runs past its deadline, or prints no reply, such as
+/// when it cannot reach GitHub; all transient.
+pub fn api(program: &Path, args: &[&str]) -> Result<Reply, PluginError> {
+    let mut command = Command::new(program);
+    command
+        .args(["api", "--include"])
+        .args(args)
+        .env("GH_PROMPT_DISABLED", "1");
 
-        let output = atelier_command::run(command, DEADLINE)?;
+    let output = atelier_command::run(command, DEADLINE)?;
 
-        parse(&output.stdout).ok_or_else(|| {
-            PluginError::transient(format!(
-                "gh api {}: {}",
-                args.join(" "),
-                output.stderr.trim()
-            ))
-        })
-    }
+    parse(&output.stdout).ok_or_else(|| {
+        PluginError::transient(format!(
+            "gh api {}: {}",
+            args.join(" "),
+            output.stderr.trim()
+        ))
+    })
 }
 
 /// A reply printed by `gh api --include`: a status line, headers, a blank

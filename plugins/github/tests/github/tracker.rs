@@ -1,5 +1,5 @@
 use atelier_core::{Failure, Filter, Listing, Mark, Repo, Tracker};
-use atelier_github::LABELS;
+use atelier_core::{Setting, Settings};
 
 use crate::stand_in::Reply::{Captured, Done, Unreachable};
 use crate::stand_in::StandIn;
@@ -20,7 +20,7 @@ fn ids(listing: &Listing) -> Vec<&str> {
 #[test]
 fn one_page_keeps_its_tag_and_an_unchanged_repository_answers_304() {
     let gh = StandIn::new(&[Captured("issues-page-2.txt"), Captured("issues-304.txt")]);
-    let github = gh.github();
+    let github = gh.tracker();
 
     let first = github
         .issues(&repo(), Mark::Build, &Filter::default(), None)
@@ -48,7 +48,7 @@ fn pages_are_followed_pull_requests_dropped_and_no_tag_kept() {
     ]);
 
     let listing = gh
-        .github()
+        .tracker()
         .issues(&repo(), Mark::Build, &Filter::default(), None)
         .unwrap();
 
@@ -67,7 +67,7 @@ fn a_filter_narrows_the_listing_by_mark_assignee_author_and_labels() {
         query: None,
     };
 
-    gh.github()
+    gh.tracker()
         .issues(&repo(), Mark::Working, &filter, None)
         .unwrap();
 
@@ -87,7 +87,7 @@ fn a_query_goes_through_search_with_no_tag() {
     };
 
     let error = gh
-        .github()
+        .tracker()
         .issues(&repo(), Mark::Build, &filter, Some("\"tag\""))
         .unwrap_err();
 
@@ -97,7 +97,7 @@ fn a_query_goes_through_search_with_no_tag() {
         "{call:?}"
     );
     assert!(
-        call[2].ends_with("label%3Aatelier%3Abuild%20milestone%3Av1"),
+        call[2].ends_with("label%3A%22atelier%3Abuild%22%20milestone%3Av1"),
         "{call:?}"
     );
     assert!(!call.iter().any(|arg| arg.starts_with("If-None-Match")));
@@ -110,7 +110,7 @@ fn a_query_goes_through_search_with_no_tag() {
 #[test]
 fn an_issue_is_read_and_a_missing_one_is_a_permanent_failure() {
     let gh = StandIn::new(&[Captured("issue-6.txt"), Captured("issue-404.txt")]);
-    let github = gh.github();
+    let github = gh.tracker();
 
     let issue = github.issue(&repo(), "6").unwrap();
     let missing = github.issue(&repo(), "999999").unwrap_err();
@@ -125,12 +125,17 @@ fn an_issue_is_read_and_a_missing_one_is_a_permanent_failure() {
 }
 
 #[test]
-fn a_rate_limit_waits_and_an_unreachable_github_retries() {
-    let gh = StandIn::new(&[Captured("rate-limited.txt"), Unreachable]);
-    let github = gh.github();
+fn a_rate_limit_waits_a_refusal_is_final_and_an_unreachable_github_retries() {
+    let gh = StandIn::new(&[
+        Captured("rate-limited.txt"),
+        Captured("forbidden.txt"),
+        Unreachable,
+    ]);
+    let tracker = gh.tracker();
 
-    let limited = github.issue(&repo(), "6").unwrap_err();
-    let unreachable = github.issue(&repo(), "6").unwrap_err();
+    let limited = tracker.issue(&repo(), "6").unwrap_err();
+    let forbidden = tracker.mark(&repo(), "1", Mark::Build).unwrap_err();
+    let unreachable = tracker.issue(&repo(), "6").unwrap_err();
 
     assert_eq!(
         limited.failure,
@@ -138,6 +143,7 @@ fn a_rate_limit_waits_and_an_unreachable_github_retries() {
             retry_after_secs: 60
         }
     );
+    assert_eq!(forbidden.failure, Failure::Permanent);
     assert_eq!(unreachable.failure, Failure::Transient);
 }
 
@@ -149,7 +155,7 @@ fn marks_comments_and_closing_change_the_issue_and_a_missing_label_is_no_failure
         Captured("issue-6.txt"),
         Captured("issue-6.txt"),
     ]);
-    let github = gh.github();
+    let github = gh.tracker();
 
     github.mark(&repo(), "12", Mark::Working).unwrap();
     github.unmark(&repo(), "12", Mark::Build).unwrap();
@@ -192,7 +198,7 @@ fn marks_comments_and_closing_change_the_issue_and_a_missing_label_is_no_failure
 #[test]
 fn labels_are_made_once_each_and_a_refusal_stops_them() {
     let gh = StandIn::new(&[Done, Done, Done, Done, Done, Unreachable]);
-    let github = gh.github();
+    let github = gh.tracker();
 
     github.create_labels(&repo()).unwrap();
     let error = github.create_labels(&repo()).unwrap_err();
@@ -201,7 +207,7 @@ fn labels_are_made_once_each_and_a_refusal_stops_them() {
     assert_eq!(calls.len(), 6);
     assert_eq!(
         calls[0][..5],
-        ["label", "create", LABELS[0].0, "--force", "--repo"]
+        ["label", "create", "atelier:build", "--force", "--repo"]
     );
     assert_eq!(calls[3][2], "improvement");
     assert!(
@@ -213,7 +219,7 @@ fn labels_are_made_once_each_and_a_refusal_stops_them() {
 #[test]
 fn a_repository_that_is_not_owner_and_name_is_refused_before_any_call() {
     let gh = StandIn::new(&[]);
-    let github = gh.github();
+    let github = gh.tracker();
 
     for name in ["atelier", "/atelier", "StevenJPx2/", "a/b/c"] {
         let error = github.issues(&Repo(name.into()), Mark::Build, &Filter::default(), None);
@@ -222,4 +228,54 @@ fn a_repository_that_is_not_owner_and_name_is_refused_before_any_call() {
     }
 
     assert_eq!(gh.calls().len(), 0);
+}
+
+#[test]
+fn a_project_s_own_labels_are_listed_set_made_and_briefed() {
+    let gh = StandIn::new(&[
+        Captured("issues-page-2.txt"),
+        Captured("issue-6.txt"),
+        Captured("issue-6.txt"),
+        Done,
+        Done,
+        Done,
+        Done,
+    ]);
+    let working = Settings::default()
+        .with("name", Setting::Text("bot:working".into()))
+        .with("color", Setting::Text("5319e7".into()));
+    let blocked = Settings::default().with("name", Setting::Text("bot:stuck".into()));
+    let labels = Settings::default()
+        .with("working", Setting::Table(working))
+        .with("blocked", Setting::Table(blocked));
+    let tracker = gh.tracker_with(&Settings::default().with("labels", Setting::Table(labels)));
+
+    tracker
+        .issues(&repo(), Mark::Working, &Filter::default(), None)
+        .unwrap();
+    tracker.mark(&repo(), "12", Mark::Blocked).unwrap();
+    let issue = tracker.issue(&repo(), "6").unwrap();
+    tracker.create_labels(&repo()).unwrap();
+
+    let calls = gh.calls();
+    assert!(
+        calls[0][2].ends_with("&labels=bot%3Aworking"),
+        "{:?}",
+        calls[0]
+    );
+    assert_eq!(calls[1][6], "labels[]=bot:stuck");
+    assert_eq!(
+        calls[4][2..],
+        [
+            "bot:working",
+            "--force",
+            "--repo",
+            "StevenJPx2/atelier",
+            "--color",
+            "5319e7",
+            "--description",
+            "An atelier builder holds this issue"
+        ]
+    );
+    assert!(Tracker::brief(&tracker, &repo(), &issue).contains("--add-label bot:stuck"));
 }

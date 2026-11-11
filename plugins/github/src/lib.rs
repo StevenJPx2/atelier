@@ -3,13 +3,15 @@
 
 mod api;
 mod forge;
+mod labels;
 mod tracker;
 
 use std::path::PathBuf;
 
 use atelier_core::{Plugin, Registry};
 
-pub use tracker::LABELS;
+pub use labels::{Label, Labels};
+pub use tracker::GitHubTracker;
 
 /// The `github` plugin.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,7 +47,7 @@ impl Plugin for GitHub {
     }
 
     fn register<'a>(&'a self, registry: &mut Registry<'a>) {
-        registry.tracker(self);
+        registry.tracker(|settings| Ok(Box::new(self.tracker(settings)?)));
         registry.forge(self);
     }
 }

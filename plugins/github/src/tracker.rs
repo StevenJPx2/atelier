@@ -1,37 +1,18 @@
 //! GitHub issues as atelier's tracker: labels are the marks.
 
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use atelier_core::{Filter, Issue, IssueKey, Listing, Mark, Marks, PluginError, Repo, Tracker};
+use atelier_core::{
+    Filter, Issue, IssueKey, Listing, Mark, Marks, PluginError, Repo, Settings, SettingsError,
+    Tracker,
+};
 use serde::Deserialize;
 
 use crate::GitHub;
-use crate::api::{encode, owner_and_name};
-
-/// The labels `atelier init` makes: name, color and description.
-pub const LABELS: [(&str, &str, &str); 4] = [
-    (
-        "atelier:build",
-        "0e8a16",
-        "Start an atelier builder on this issue",
-    ),
-    (
-        "atelier:working",
-        "fbca04",
-        "An atelier builder holds this issue",
-    ),
-    (
-        "atelier:blocked",
-        "d93f0b",
-        "The atelier builder stopped; the pull request says why",
-    ),
-    (
-        "improvement",
-        "c5def5",
-        "A critic's finding that does not block, kept for later",
-    ),
-];
+use crate::api::{api, encode, owner_and_name};
+use crate::labels::Labels;
 
 /// The most pages one listing reads, 100 issues each.
 const MAX_PAGES: usize = 10;
@@ -39,11 +20,26 @@ const MAX_PAGES: usize = 10;
 /// The longest `gh label create` may take.
 const LABEL_DEADLINE: Duration = Duration::from_secs(30);
 
-const fn label(mark: Mark) -> &'static str {
-    match mark {
-        Mark::Build => "atelier:build",
-        Mark::Working => "atelier:working",
-        Mark::Blocked => "atelier:blocked",
+/// GitHub as one project's tracker, with that project's labels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitHubTracker {
+    program: PathBuf,
+    labels: Labels,
+}
+
+impl GitHub {
+    /// This project's tracker, from its `[[tracker]]` settings.
+    ///
+    /// # Errors
+    ///
+    /// A setting it cannot use; see [`Labels::from_settings`].
+    pub fn tracker(&self, settings: &Settings) -> Result<GitHubTracker, SettingsError> {
+        let labels = Labels::from_settings(settings)?;
+
+        Ok(GitHubTracker {
+            program: self.program.clone(),
+            labels,
+        })
     }
 }
 
@@ -67,14 +63,18 @@ struct Search {
 }
 
 impl Raw {
-    fn issue(self) -> Option<Issue> {
+    fn issue(self, labels: &Labels) -> Option<Issue> {
         if self.pull_request.is_some() {
             return None;
         }
 
         let marks = [Mark::Build, Mark::Working, Mark::Blocked]
             .into_iter()
-            .filter(|mark| self.labels.iter().any(|found| found.name == label(*mark)))
+            .filter(|mark| {
+                self.labels
+                    .iter()
+                    .any(|found| found.name == labels.mark(*mark).name)
+            })
             .collect::<Marks>();
 
         Some(Issue {
@@ -94,17 +94,28 @@ fn json<T: for<'de> Deserialize<'de>>(body: &str, what: &str) -> Result<T, Plugi
         .map_err(|error| PluginError::permanent(format!("{what}: GitHub's reply: {error}")))
 }
 
-impl GitHub {
-    /// Makes atelier's labels in `repo`, or updates them if they exist.
+impl GitHubTracker {
+    /// This project's labels.
+    #[must_use]
+    pub const fn labels(&self) -> &Labels {
+        &self.labels
+    }
+
+    fn api(&self, args: &[&str]) -> Result<crate::api::Reply, PluginError> {
+        api(&self.program, args)
+    }
+
+    /// Makes the project's labels in `repo`, or updates them if they exist.
     ///
     /// # Errors
     ///
     /// `gh` fails to make one.
     pub fn create_labels(&self, repo: &Repo) -> Result<(), PluginError> {
-        for (name, color, description) in LABELS {
+        for label in self.labels.all() {
+            let name = &label.name;
             let mut command = Command::new(&self.program);
             command.args(["label", "create", name, "--force", "--repo", &repo.0]);
-            command.args(["--color", color, "--description", description]);
+            command.args(["--color", &label.color, "--description", &label.description]);
 
             let output = atelier_command::run(command, LABEL_DEADLINE)?;
 
@@ -149,7 +160,10 @@ impl GitHub {
         } else {
             None
         };
-        let issues = issues.into_iter().filter_map(Raw::issue).collect();
+        let issues = issues
+            .into_iter()
+            .filter_map(|raw| raw.issue(&self.labels))
+            .collect();
 
         Ok(Listing::Changed { issues, etag })
     }
@@ -157,8 +171,13 @@ impl GitHub {
     fn search(&self, repo: &Repo, mark: Mark, filter: &Filter) -> Result<Listing, PluginError> {
         let query = filter.query.as_deref().unwrap_or_default();
         let mut terms = vec![format!("repo:{}", repo.0), "is:issue is:open".into()];
-        terms.push(format!("label:{}", label(mark)));
-        terms.extend(filter.labels.iter().map(|extra| format!("label:{extra}")));
+        terms.push(format!("label:\"{}\"", self.labels.mark(mark).name));
+        terms.extend(
+            filter
+                .labels
+                .iter()
+                .map(|extra| format!("label:\"{extra}\"")),
+        );
         terms.extend(filter.assignee.iter().map(|who| format!("assignee:{who}")));
         terms.extend(filter.author.iter().map(|who| format!("author:{who}")));
         terms.push(query.to_owned());
@@ -169,13 +188,17 @@ impl GitHub {
         );
         let reply = self.api(&[&path])?.ok("searching issues")?;
         let search: Search = json(&reply.body, "searching issues")?;
-        let issues = search.items.into_iter().filter_map(Raw::issue).collect();
+        let issues = search
+            .items
+            .into_iter()
+            .filter_map(|raw| raw.issue(&self.labels))
+            .collect();
 
         Ok(Listing::Changed { issues, etag: None })
     }
 }
 
-impl Tracker for GitHub {
+impl Tracker for GitHubTracker {
     /// Lists with `If-None-Match`, so an unchanged repository answers 304
     /// and costs no rate limit. A filter's `query` goes through GitHub
     /// search instead, with no tag. At most ten pages of 100 are read, and a
@@ -193,7 +216,7 @@ impl Tracker for GitHub {
             return self.search(repo, mark, filter);
         }
 
-        let mut labels = vec![label(mark).to_owned()];
+        let mut labels = vec![self.labels.mark(mark).name.clone()];
         labels.extend(filter.labels.iter().cloned());
 
         let mut query = vec![
@@ -226,13 +249,13 @@ impl Tracker for GitHub {
             .ok(&what)?;
         let raw: Raw = json(&reply.body, &what)?;
 
-        raw.issue()
+        raw.issue(&self.labels)
             .ok_or_else(|| PluginError::permanent(format!("#{id} is a pull request")))
     }
 
     fn mark(&self, repo: &Repo, id: &str, mark: Mark) -> Result<(), PluginError> {
         let path = format!("repos/{}/issues/{}/labels", repo.0, encode(id));
-        let field = format!("labels[]={}", label(mark));
+        let field = format!("labels[]={}", self.labels.mark(mark).name);
 
         self.api(&["--method", "POST", &path, "--raw-field", &field])?
             .ok(&format!("labelling #{id}"))?;
@@ -246,7 +269,7 @@ impl Tracker for GitHub {
             "repos/{}/issues/{}/labels/{}",
             repo.0,
             encode(id),
-            encode(label(mark))
+            encode(&self.labels.mark(mark).name)
         );
         let reply = self.api(&["--method", "DELETE", &path])?;
 
@@ -291,12 +314,13 @@ impl Tracker for GitHub {
     fn brief(&self, repo: &Repo, issue: &Issue) -> String {
         let id = &issue.key.id;
         let repo = &repo.0;
+        let blocked = &self.labels.blocked.name;
 
         format!(
             "The issue is #{id} in {repo}. Read it with its comments: \
              `gh issue view {id} --repo {repo} --comments`. When only a person can \
              unblock you, mark it blocked: \
-             `gh issue edit {id} --repo {repo} --add-label atelier:blocked`."
+             `gh issue edit {id} --repo {repo} --add-label {blocked}`."
         )
     }
 }
@@ -313,7 +337,7 @@ mod tests {
         )
         .unwrap();
 
-        let issue = raw.issue().unwrap();
+        let issue = raw.issue(&Labels::default()).unwrap();
 
         assert_eq!(
             issue.marks,

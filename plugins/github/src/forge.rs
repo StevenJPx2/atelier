@@ -4,7 +4,7 @@ use atelier_core::{Checks, Forge, PluginError, PullRequest, Repo};
 use serde::Deserialize;
 
 use crate::GitHub;
-use crate::api::owner_and_name;
+use crate::api::{api, owner_and_name};
 
 /// The newest pull request on a branch, with each of its last 100 commits'
 /// combined check state.
@@ -122,7 +122,7 @@ impl Forge for GitHub {
             args.extend(["--raw-field", field.as_str()]);
         }
 
-        let reply = self.api(&args)?.ok(&what)?;
+        let reply = api(&self.program, &args)?.ok(&what)?;
         let parsed: Reply = serde_json::from_str(&reply.body)
             .map_err(|error| PluginError::permanent(format!("{what}: GitHub's reply: {error}")))?;
 

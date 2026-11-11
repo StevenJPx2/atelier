@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{Agent, Forge, Tracker};
+use crate::{Agent, Forge, Settings, SettingsError, Tracker};
 
 /// A crate atelier is built with. Its `register` adds the roles it fills.
 pub trait Plugin {
@@ -19,10 +19,26 @@ pub enum Role {
     Agent,
 }
 
+/// What a tracker plugin registers: its tracker for one project, built
+/// from that project's settings for it.
+type Make<'a> = dyn Fn(&Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError> + 'a;
+
+/// Builds a plugin's tracker for one project.
+pub struct MakeTracker<'a>(Box<Make<'a>>);
+
+impl<'a> MakeTracker<'a> {
+    /// # Errors
+    ///
+    /// A setting the plugin cannot use.
+    pub fn make(&self, settings: &Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError> {
+        (self.0)(settings)
+    }
+}
+
 /// Every role the build's plugins fill, by plugin name.
 pub struct Registry<'a> {
     naming: &'static str,
-    trackers: Vec<(&'static str, &'a dyn Tracker)>,
+    trackers: Vec<(&'static str, MakeTracker<'a>)>,
     forges: Vec<(&'static str, &'a dyn Forge)>,
     agents: Vec<(&'static str, &'a dyn Agent)>,
 }
@@ -54,8 +70,13 @@ impl<'a> Registry<'a> {
         registry
     }
 
-    pub fn tracker(&mut self, tracker: &'a dyn Tracker) {
-        self.trackers.push((self.naming, tracker));
+    /// Registers how to build this plugin's tracker for a project.
+    pub fn tracker(
+        &mut self,
+        make: impl Fn(&Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError> + 'a,
+    ) {
+        self.trackers
+            .push((self.naming, MakeTracker(Box::new(make))));
     }
 
     pub fn forge(&mut self, forge: &'a dyn Forge) {
@@ -69,8 +90,16 @@ impl<'a> Registry<'a> {
     /// # Errors
     ///
     /// No plugin by that name is a tracker.
-    pub fn find_tracker(&self, name: &str) -> Result<&'a dyn Tracker, MissingPlugin> {
-        find(&self.trackers, Role::Tracker, name)
+    pub fn find_tracker(&self, name: &str) -> Result<&MakeTracker<'a>, MissingPlugin> {
+        self.trackers
+            .iter()
+            .find(|(found, _)| *found == name)
+            .map(|(_, make)| make)
+            .ok_or_else(|| MissingPlugin {
+                role: Role::Tracker,
+                name: Some(name.to_owned()),
+                available: self.trackers.iter().map(|(name, _)| *name).collect(),
+            })
     }
 
     /// # Errors

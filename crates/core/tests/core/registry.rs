@@ -1,7 +1,7 @@
 //! Plugins register the roles they fill, and projects find them by name.
 
 use crate::world::World;
-use atelier_core::{Plugin, Registry};
+use atelier_core::{Plugin, Registry, Setting, Settings};
 
 struct Both(World);
 
@@ -13,7 +13,10 @@ impl Plugin for Both {
     }
 
     fn register<'a>(&'a self, registry: &mut Registry<'a>) {
-        registry.tracker(&self.0);
+        registry.tracker(|settings| {
+            settings.only("", &["site"])?;
+            Ok(Box::new(World::default()))
+        });
         registry.forge(&self.0);
     }
 }
@@ -78,5 +81,24 @@ fn with_no_agent_or_two_a_project_must_name_one() {
             Some("name the agent plugin to use; this atelier has none".to_owned()),
             Some("name the agent plugin to use; this atelier has agent, agent".to_owned()),
         ]
+    );
+}
+
+#[test]
+fn each_project_builds_its_own_tracker_from_its_settings() {
+    let both = Both(World::default());
+    let registry = Registry::new(&[&both]);
+    let make = registry.find_tracker("both").unwrap();
+
+    let fine = Settings::default().with("site", Setting::Text("example.org".into()));
+    let misspelt = Settings::default().with("stie", Setting::Text("example.org".into()));
+
+    assert!(make.make(&fine).is_ok());
+    assert_eq!(
+        make.make(&misspelt)
+            .err()
+            .map(|error| error.to_string())
+            .as_deref(),
+        Some("stie: unknown; it takes site")
     );
 }

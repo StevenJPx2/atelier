@@ -12,19 +12,21 @@ flowchart LR
     Forge -- "gh api graphql" --> GitHub
 ```
 
-| File         | Holds                                                               |
-| ------------ | ------------------------------------------------------------------- |
-| `lib.rs`     | `GitHub`, and `Plugin`: registers the tracker and the forge         |
-| `api.rs`     | `gh api --include`: status, headers and body; rate limits; encoding |
-| `tracker.rs` | Listing with ETags and pages, search, marks as labels, `LABELS`     |
-| `forge.rs`   | One GraphQL query: the pull request and each commit's checks        |
+| File         | Holds                                                                    |
+| ------------ | ------------------------------------------------------------------------ |
+| `lib.rs`     | `GitHub`, and `Plugin`: registers the tracker and the forge              |
+| `api.rs`     | `gh api --include`: status, headers and body; rate limits; encoding      |
+| `tracker.rs` | `GitHubTracker`: listing with ETags and pages, search, marking, comments |
+| `labels.rs`  | `Labels`: each mark's label, from the project's settings                 |
+| `forge.rs`   | One GraphQL query: the pull request and each commit's checks             |
 
 ```rust
 let github = GitHub::new();
+let tracker = github.tracker(&settings)?;
 let repo = Repo("StevenJPx2/chauffeur".into());
 let mine = Filter { assignee: Some("StevenJPx2".into()), ..Filter::default() };
 
-let listing = github.issues(&repo, Mark::Build, &mine, Some("W/\"f235c4…\""))?;
+let listing = tracker.issues(&repo, Mark::Build, &mine, Some("W/\"f235c4…\""))?;
 // GET repos/StevenJPx2/chauffeur/issues?state=open&per_page=100
 //     &labels=atelier%3Abuild&assignee=StevenJPx2, If-None-Match: W/"f235c4…"
 // → Listing::Unchanged
@@ -33,8 +35,10 @@ let pull = github.pull_request(&repo, "issue-12-fix-the-dead-link")?;
 // → Some(PullRequest::Open { number: 31, draft: true, failed_rounds: 1, checks: Passed })
 ```
 
-- **Marks** are the labels `atelier:build`, `atelier:working` and
-  `atelier:blocked`; `create_labels` makes them, and `improvement`.
+- **Marks** are labels, `atelier:build`, `atelier:working` and
+  `atelier:blocked` unless the project's `[[tracker]]` sets its own, such as
+  `labels.working = { name = "bot:working" }`; `create_labels` makes them, and
+  `improvement`.
 - **Listing** sends the tag atelier holds, so an unchanged repository answers 304. It reads at most ten pages of 100, and a listing of more than one page
   keeps no tag. Pull requests are left out.
 - **A filter's query** goes through GitHub search, with no tag.

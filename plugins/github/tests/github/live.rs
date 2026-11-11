@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use atelier_core::{Filter, Forge, Listing, Mark, PullRequest, Repo, Tracker};
+use atelier_core::{Filter, Forge, Listing, Mark, PullRequest, Repo, Settings, Tracker};
 use atelier_github::GitHub;
 
 fn signed_in() -> bool {
@@ -26,16 +26,17 @@ fn the_real_github_answers_as_the_captured_replies_do() {
         ..Filter::default()
     };
 
-    let issue = github.issue(&repo, "6").unwrap();
+    let tracker = github.tracker(&Settings::default()).unwrap();
+    let issue = tracker.issue(&repo, "6").unwrap();
     let merged = github.pull_request(&repo, "feat/slice-0-setup").unwrap();
-    let first = github.issues(&repo, Mark::Build, &filter, None).unwrap();
+    let first = tracker.issues(&repo, Mark::Build, &filter, None).unwrap();
     let Listing::Changed {
         etag: Some(etag), ..
     } = first
     else {
         panic!("{first:?}")
     };
-    let again = github
+    let again = tracker
         .issues(&repo, Mark::Build, &filter, Some(&etag))
         .unwrap();
 

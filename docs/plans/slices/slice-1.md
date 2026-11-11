@@ -260,8 +260,10 @@ pub trait Worktrees {
 }
 ```
 
-A plugin registers the roles it fills under its name. A project with no agent
-named takes the build's only one.
+A plugin registers the roles it fills under its name. A tracker is
+registered as a constructor, so each project builds its own from its
+`[[tracker]]` settings; forges and agents are one instance each. A project
+with no agent named takes the build's only one.
 
 ```rust
 pub trait Plugin {
@@ -273,15 +275,42 @@ pub enum Role { Tracker, Forge, Agent }
 
 pub struct MissingPlugin { pub role: Role, pub name: Option<String>, pub available: Vec<&'static str> }
 
+impl<'a> MakeTracker<'a> {
+    pub fn make(&self, settings: &Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError>;
+}
+
 impl<'a> Registry<'a> {
     pub fn new(plugins: &[&'a dyn Plugin]) -> Self;
-    pub fn tracker(&mut self, tracker: &'a dyn Tracker);
+    pub fn tracker(
+        &mut self,
+        make: impl Fn(&Settings) -> Result<Box<dyn Tracker + 'a>, SettingsError> + 'a,
+    );
     pub fn forge(&mut self, forge: &'a dyn Forge);
     pub fn agent(&mut self, agent: &'a dyn Agent);
-    pub fn find_tracker(&self, name: &str) -> Result<&'a dyn Tracker, MissingPlugin>;
+    pub fn find_tracker(&self, name: &str) -> Result<&MakeTracker<'a>, MissingPlugin>;
     pub fn find_forge(&self, name: &str) -> Result<&'a dyn Forge, MissingPlugin>;
     pub fn find_agent(&self, name: Option<&str>) -> Result<&'a dyn Agent, MissingPlugin>;
 }
+```
+
+A plugin's settings are plain values, so core needs no config format and each
+plugin reads only its own keys. `only` fails on a key the plugin does not
+know, so a misspelt setting is never quietly ignored; each error names its
+dotted path, such as `labels.working.color`.
+
+```rust
+pub enum Setting { Text(String), Number(i64), Flag(bool), List(Vec<Self>), Table(Settings) }
+
+pub struct Settings(BTreeMap<String, Setting>);
+
+impl Settings {
+    pub fn with(self, key: &str, value: Setting) -> Self;
+    pub fn only(&self, path: &str, known: &[&str]) -> Result<(), SettingsError>;
+    pub fn text(&self, path: &str, key: &str) -> Result<Option<&str>, SettingsError>;
+    pub fn table(&self, path: &str, key: &str) -> Result<Option<&Self>, SettingsError>;
+}
+
+pub struct SettingsError { pub key: String, pub problem: String }
 ```
 
 The brief is the contract filled in for one issue, then each plugin's part,
@@ -549,8 +578,10 @@ let pull = github.pull_request(&repo, "issue-12-fix-the-dead-link")?;
 #### Structure
 
 `GitHub` runs `gh` from `PATH`, or another program, such as a stand-in in
-tests. It registers as `github`, the name its issue keys carry, in both
-roles. `create_labels` makes atelier's labels with `gh label create --force`.
+tests. It registers as `github`, the name its issue keys carry: as a forge
+itself, and as a tracker through `tracker`, which builds one project's
+`GitHubTracker` from its `[[tracker]]` settings. `create_labels` makes that
+project's labels with `gh label create --force`.
 
 ```rust
 pub struct GitHub {
@@ -560,14 +591,55 @@ pub struct GitHub {
 impl GitHub {
     pub fn new() -> Self;
     pub fn with_program(program: impl Into<PathBuf>) -> Self;
+    pub fn tracker(&self, settings: &Settings) -> Result<GitHubTracker, SettingsError>;
+}
+
+pub struct GitHubTracker {
+    program: PathBuf,
+    labels: Labels,
+}
+
+impl GitHubTracker {
+    pub const fn labels(&self) -> &Labels;
     pub fn create_labels(&self, repo: &Repo) -> Result<(), PluginError>;
 }
 
-pub const LABELS: [(&str, &str, &str); 4];
-
 impl Plugin for GitHub {}
-impl Tracker for GitHub {}
 impl Forge for GitHub {}
+impl Tracker for GitHubTracker {}
+```
+
+Each mark is a label, and so is `improvement`, for a critic's findings that do
+not block. A project sets any of them in its `[[tracker]]`; what it leaves
+out keeps atelier's own. A name must not be empty and a color must be six hex
+digits; an unknown key is refused.
+
+```toml
+# .atelier/config.toml
+[[tracker]]
+plugin = "github"
+labels.working = { name = "bot:working", color = "5319e7" }
+```
+
+```rust
+pub struct Label {
+    pub name: String,
+    pub color: String,
+    pub description: String,
+}
+
+pub struct Labels {
+    pub build: Label,
+    pub working: Label,
+    pub blocked: Label,
+    pub improvement: Label,
+}
+
+impl Labels {
+    pub fn from_settings(settings: &Settings) -> Result<Self, SettingsError>;
+    pub const fn mark(&self, mark: Mark) -> &Label;
+    pub const fn all(&self) -> [&Label; 4];
+}
 ```
 
 Every call is `gh api --include`, read whatever its status: a 304 is
@@ -607,7 +679,7 @@ followed, pull requests dropped and no tag kept; a filter becomes the query
 string; a query goes through search; a missing issue is permanent; a rate
 limit waits 60 seconds, a refusal is final and an unreachable GitHub retries;
 marks, comments and closing send what GitHub expects; labels are made once
-each; a repository that is not `owner/name` is refused before any call; PR
+each; a project's own labels are listed, set, made and briefed; a repository that is not `owner/name` is refused before any call; PR
 #8's real history reads as merged, and open with one failed round; the brief
 names GitHub's commands; the plugin registers under the name its issues carry.
 Unit tests read every status and every pull request state. One test runs the

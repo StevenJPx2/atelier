@@ -11,7 +11,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use atelier_github::GitHub;
+use atelier_core::Settings;
+use atelier_github::{GitHub, GitHubTracker};
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
@@ -73,6 +74,16 @@ impl StandIn {
 
     pub fn github(&self) -> GitHub {
         GitHub::with_program(self.dir.join("gh"))
+    }
+
+    /// The tracker for a project with `settings`.
+    pub fn tracker_with(&self, settings: &Settings) -> GitHubTracker {
+        self.github().tracker(settings).unwrap()
+    }
+
+    /// The tracker for a project that sets nothing.
+    pub fn tracker(&self) -> GitHubTracker {
+        self.tracker_with(&Settings::default())
     }
 
     /// Each call's arguments, in order.

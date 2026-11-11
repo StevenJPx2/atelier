@@ -1,4 +1,4 @@
-use atelier_core::{Checks, Forge, Plugin, PullRequest, Registry, Repo, Tracker};
+use atelier_core::{Checks, Forge, Plugin, PullRequest, Registry, Repo, Settings, Tracker};
 
 use crate::stand_in::Reply::Captured;
 use crate::stand_in::StandIn;
@@ -54,16 +54,17 @@ fn a_pull_request_reads_its_state_drafts_and_failed_rounds() {
 fn the_brief_gives_the_builder_github_s_commands_and_denies_merging_and_releasing() {
     let gh = StandIn::new(&[Captured("issue-6.txt")]);
     let github = gh.github();
-    let issue = github.issue(&repo(), "6").unwrap();
+    let tracker = gh.tracker();
+    let issue = tracker.issue(&repo(), "6").unwrap();
 
-    let reference = github.reference(&issue);
-    let tracker = Tracker::brief(&github, &repo(), &issue);
+    let reference = tracker.reference(&issue);
+    let briefed = Tracker::brief(&tracker, &repo(), &issue);
     let forge = Forge::brief(&github, &repo(), "v2", "issue-6-x");
 
     assert_eq!(reference, "#6");
-    assert!(tracker.contains("`gh issue view 6 --repo StevenJPx2/atelier --comments`"));
+    assert!(briefed.contains("`gh issue view 6 --repo StevenJPx2/atelier --comments`"));
     assert!(
-        tracker.contains("`gh issue edit 6 --repo StevenJPx2/atelier --add-label atelier:blocked`")
+        briefed.contains("`gh issue edit 6 --repo StevenJPx2/atelier --add-label atelier:blocked`")
     );
     assert!(forge.contains("--draft --repo StevenJPx2/atelier --base v2 --head issue-6-x"));
     assert!(forge.contains("gh pr ready"));
@@ -80,6 +81,8 @@ fn the_plugin_registers_both_roles_under_the_name_its_issues_carry() {
 
     let issue = registry
         .find_tracker(github.name())
+        .unwrap()
+        .make(&Settings::default())
         .unwrap()
         .issue(&repo(), "6")
         .unwrap();

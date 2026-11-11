@@ -10,7 +10,7 @@ planned for slice 1; the service definition is available but is not started.
 brew install StevenJPx2/taps/atelier
 
 atelier --version
-# atelier 0.1.0-rc.1
+# atelier 0.1.0-rc.2
 ```
 
 ```mermaid
@@ -36,7 +36,7 @@ Files: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `clippy.toml`,
 
 ```sh
 cargo run --locked -p atelier-cli -- --version
-# atelier 0.1.0-rc.1
+# atelier 0.1.0-rc.2
 ```
 
 #### Structure
@@ -120,14 +120,14 @@ tap job pass and the owner's local install reports the candidate version.
 
 1. Run the full local gates and package the release binary.
 2. Open a pull request and wait for every Check job to pass.
-3. Obtain the owner's approval to merge and cut `0.1.0-rc.1`.
+3. Obtain the owner's approval to merge and cut `0.1.0-rc.2`.
 4. Bump the workspace version, regenerate the lockfile, commit with
-   `chore(release): 0.1.0-rc.1`, and wait for Check to pass.
-5. Obtain the owner's approval for `v0.1.0-rc.1` and push the tag.
+   `chore(release): 0.1.0-rc.2`, and wait for Check to pass.
+5. Obtain the owner's approval for `v0.1.0-rc.2` and push the tag.
 6. Watch all native builds and the GitHub release finish; the owner approves
    the protected tap job.
 7. Install with `brew install StevenJPx2/taps/atelier`, run `brew test`, and
-   confirm `atelier --version` prints `atelier 0.1.0-rc.1`.
+   confirm `atelier --version` prints `atelier 0.1.0-rc.2`.
 
 Slice 1 waits for the owner's review of this candidate. No service or builder
 starts as part of slice 0's proof.

@@ -54,26 +54,26 @@ dependencies = [
 
 [[package]]
 name = "atelier-cli"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "clap",
 ]
 
 [[package]]
 name = "atelier-core"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 
 [[package]]
 name = "atelier-git"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 
 [[package]]
 name = "atelier-github"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 
 [[package]]
 name = "atelier-opencode"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 
 [[package]]
 name = "clap"

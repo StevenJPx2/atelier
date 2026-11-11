@@ -16,7 +16,7 @@ flowchart TD
 | Crate                 | Responsibility                                | Status                      |
 | --------------------- | --------------------------------------------- | --------------------------- |
 | `cli`                 | The `atelier` binary                          | Version and help in slice 0 |
-| `core`                | Issue machine and plugin contracts            | Planned, slice 1            |
+| `core`                | Issue machine and plugin contracts            | Built, slice 1              |
 | `git`                 | Worktrees and branches behind core's contract | Planned, slice 1            |
 | `../plugins/github`   | GitHub tracker and forge                      | Planned, slice 1            |
 | `../plugins/opencode` | OpenCode sessions and permissions             | Planned, slice 1            |
@@ -46,13 +46,14 @@ cargo run --locked -p atelier-cli -- --version
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo nextest run --workspace --all-targets --all-features --locked --no-tests=warn
+cargo nextest run --workspace --all-targets --all-features --locked
 cargo test --workspace --doc --all-features --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 cargo +1.96 check --workspace --all-targets --all-features --locked
 cargo deny check
 cargo mutants --workspace --timeout 120
+cargo kani -p atelier-core
 ```
 
-The CLI's tests execute the real binary and check output streams and status.
-Kani harnesses enter with the core state machine in slice 1.
+Kani proves the issue machine's promises for every phase and event; each
+harness takes about 20 seconds.

@@ -3,9 +3,11 @@ test_workspace = true
 test_tool = "nextest"
 # Kani harnesses run under cargo kani, not nextest.
 exclude_globs = ["**/proofs.rs"]
-# Not covered by a Rust test: main only hands clap's version and help to the
-# terminal. The packaged smoke run in check.yml and release.yml executes the
-# real binary instead. Slice 1 gives main behavior and removes this line.
 exclude_re = [
+  # Not covered by a Rust test: main only hands clap's version and help to the
+  # terminal. The packaged smoke run in check.yml and release.yml executes the
+  # real binary instead. The CLI's daemon gives main behavior and removes this.
   'crates/cli/src/main\.rs:\d+:\d+: replace main -> std::io::Result<ExitCode> with Ok\(Default::default\(\)\)',
+  # Built only under cfg(kani), for the proofs; cargo kani checks it.
+  'crates/core/src/machine/pipeline\.rs:\d+:\d+: replace Pipeline::unnamed',
 ]

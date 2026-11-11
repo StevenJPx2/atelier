@@ -2,10 +2,10 @@
 
 **Status: In progress.** The core is built: the issue machine and its Kani
 proofs, the poll's events, `observe` and `act`, the roles and the registry.
-So are `crates/git` and the `github` plugin
-([#6](https://github.com/StevenJPx2/atelier/issues/6)). Then the `opencode` plugin
-([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI and daemon,
-one pull request each.
+So are `crates/git`, the `github` plugin
+([#6](https://github.com/StevenJPx2/atelier/issues/6)) and the `opencode`
+plugin ([#7](https://github.com/StevenJPx2/atelier/issues/7)). Then the CLI
+and daemon.
 
 You can label an issue `atelier:build` in a watched project and, within a
 poll, find a builder working on it in its own worktree. It opens a draft pull
@@ -686,9 +686,80 @@ Unit tests read every status and every pull request state. One test runs the
 same reads against the real GitHub when `gh` is signed in; mutation testing
 runs with it skipped, as CI does.
 
-### The `opencode` plugin
+### The `opencode` plugin (`plugins/opencode`)
 
-Planned in its own issue: [#7](https://github.com/StevenJPx2/atelier/issues/7).
+Each builder as an ordinary OpenCode session, started through `opencode api`
+([#7](https://github.com/StevenJPx2/atelier/issues/7)).
+
+Files: [`plugins/opencode/`](../../../plugins/opencode/README.md).
+
+```rust
+let opencode = OpenCode::new();
+
+let session = opencode.start(&worktree, &brief)?;
+// post /api/session {"title": "#12 Fix the dead link",
+//                    "location": {"directory": "<worktree>"}, "permissions": [...]}
+// post /api/session/ses_…/prompt {"text": "<the brief>"}
+// → Session { id: "ses_…", title: "#12 Fix the dead link" }
+
+opencode.interrupt(&session)?;
+```
+
+#### Structure
+
+`OpenCode` runs `opencode` from `PATH`, which talks to its running server,
+or another program in tests. It registers as the agent `opencode`. `start`
+deletes a session whose prompt fails. Each call has a 30-second deadline; a
+4xx is permanent, anything else transient.
+
+```rust
+pub struct OpenCode {
+    program: PathBuf,
+}
+
+impl OpenCode {
+    pub fn new() -> Self;
+    pub fn with_program(program: impl Into<PathBuf>) -> Self;
+}
+
+impl Plugin for OpenCode {}
+impl Agent for OpenCode {}
+```
+
+The brief's denials become permission rules, and the last matching rule
+wins: its tools allowed; `git push *` denied, then `git push origin <branch>`
+and its `-u` forms allowed; each denied command after that; the question tool
+denied.
+
+```rust
+pub enum Effect { Allow, Deny }
+
+pub struct Rule {
+    pub action: String,
+    pub resource: String,
+    pub effect: Effect,
+}
+
+pub fn rules(brief: &Brief) -> Vec<Rule>;
+```
+
+#### Verification
+
+A stand-in `opencode` replays what OpenCode v2.2.7 printed: a builder starts
+as a session in its worktree with its rules, then gets its brief; a session
+whose prompt fails is deleted; interrupting an idle session succeeds and a
+missing one fails for good; a reply that is not a session is refused; it is
+the build's agent under its name.
+
+Once against the real OpenCode, on demand, since it starts a model turn: a
+session in a temporary repository told to run `git push origin main`,
+`gh pr merge 999999` and `git push origin issue-1-live` is refused the first
+two with `Permission denied: shell`, `origin`'s `main` is unchanged, and its
+own branch is pushed.
+
+```sh
+cargo nextest run -p atelier-opencode --run-ignored only
+```
 
 ### The CLI and daemon (`crates/cli`)
 

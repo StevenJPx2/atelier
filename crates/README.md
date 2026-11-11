@@ -22,7 +22,7 @@ flowchart TD
 | `core`                | Issue machine and plugin contracts                | Built, slice 1              |
 | `command`             | Running a tool with a deadline and bounded output | Built, slice 1              |
 | `git`                 | Worktrees and branches behind core's contract     | Built, slice 1              |
-| `../plugins/github`   | GitHub tracker and forge                          | Planned, slice 1            |
+| `../plugins/github`   | GitHub tracker and forge                          | Built, slice 1              |
 | `../plugins/opencode` | OpenCode sessions and permissions                 | Planned, slice 1            |
 
 The planned library crates contain crate documentation and no behavior.

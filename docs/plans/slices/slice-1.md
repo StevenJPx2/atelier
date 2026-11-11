@@ -2,8 +2,8 @@
 
 **Status: In progress.** The core is built: the issue machine and its Kani
 proofs, the poll's events, `observe` and `act`, the roles and the registry.
-So is `crates/git`. Then the `github` plugin
-([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode` plugin
+So are `crates/git` and the `github` plugin
+([#6](https://github.com/StevenJPx2/atelier/issues/6)). Then the `opencode` plugin
 ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI and daemon,
 one pull request each.
 
@@ -525,10 +525,95 @@ pub fn run(command: Command, deadline: Duration) -> Result<Output, PluginError>;
 A command past its deadline is killed with its children within the deadline;
 output stops at its bound; a missing tool fails transiently.
 
-### The `github` plugin and the `opencode` plugin
+### The `github` plugin (`plugins/github`)
 
-Planned in their own issues: [#6](https://github.com/StevenJPx2/atelier/issues/6)
-and [#7](https://github.com/StevenJPx2/atelier/issues/7).
+GitHub as tracker and forge, through `gh` ([#6](https://github.com/StevenJPx2/atelier/issues/6)).
+Its CI part, `gates.yml`, comes with slice 2.
+
+Files: [`plugins/github/`](../../../plugins/github/README.md).
+
+```rust
+let github = GitHub::new();
+let repo = Repo("StevenJPx2/chauffeur".into());
+let mine = Filter { assignee: Some("StevenJPx2".into()), ..Filter::default() };
+
+let listing = github.issues(&repo, Mark::Build, &mine, Some(etag))?;
+// → Listing::Unchanged, from a 304
+
+github.mark(&repo, "12", Mark::Working)?;
+
+let pull = github.pull_request(&repo, "issue-12-fix-the-dead-link")?;
+// → Some(PullRequest::Open { number: 31, draft: true, failed_rounds: 1, checks: Passed })
+```
+
+#### Structure
+
+`GitHub` runs `gh` from `PATH`, or another program, such as a stand-in in
+tests. It registers as `github`, the name its issue keys carry, in both
+roles. `create_labels` makes atelier's labels with `gh label create --force`.
+
+```rust
+pub struct GitHub {
+    program: PathBuf,
+}
+
+impl GitHub {
+    pub fn new() -> Self;
+    pub fn with_program(program: impl Into<PathBuf>) -> Self;
+    pub fn create_labels(&self, repo: &Repo) -> Result<(), PluginError>;
+}
+
+pub const LABELS: [(&str, &str, &str); 4];
+
+impl Plugin for GitHub {}
+impl Tracker for GitHub {}
+impl Forge for GitHub {}
+```
+
+Every call is `gh api --include`, read whatever its status: a 304 is
+unchanged; a 403 with `Retry-After` or no rate left, or a 429, waits that
+long (60 seconds when GitHub does not say); a 5xx or no reply is transient;
+any other error status is permanent. A listing reads at most ten pages and
+keeps a tag only when it is one page. A filter's `query` uses search, with no
+tag. Removing a label that is gone succeeds.
+
+```rust
+struct Reply {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: String,
+}
+
+impl Reply {
+    pub fn header(&self, name: &str) -> Option<&str>;
+    pub fn next(&self) -> Option<&str>;
+    pub fn ok(self, what: &str) -> Result<Self, PluginError>;
+}
+```
+
+The forge asks one GraphQL query for the newest pull request on the branch,
+with its last 100 commits' combined check state. A failed round is a commit
+whose checks failed or errored; the head's checks are pending until they
+report. The brief tells the builder to open the pull request as a draft,
+watch it with a sourcefed `github` monitor and mark it ready with
+`gh pr ready`; `gh pr merge` and `gh release` are denied.
+
+#### Verification
+
+A stand-in `gh` replays replies captured from GitHub, listed in
+[`fixtures/README.md`](../../../plugins/github/tests/github/fixtures/README.md):
+one page keeps its tag and the same listing then answers 304; pages are
+followed, pull requests dropped and no tag kept; a filter becomes the query
+string; a query goes through search; a missing issue is permanent; a rate
+limit waits 60 seconds and an unreachable GitHub retries; marks, comments and
+closing send what GitHub expects; PR #8's real history reads as merged, and
+open with one failed round; the plugin registers under the name its issues
+carry. One test runs the same reads against the real GitHub when `gh` is
+signed in.
+
+### The `opencode` plugin
+
+Planned in its own issue: [#7](https://github.com/StevenJPx2/atelier/issues/7).
 
 ### The CLI and daemon (`crates/cli`)
 

@@ -132,7 +132,10 @@ stateDiagram-v2
 | `improvement`     | Critic  | A finding that does not block, kept for later    |
 
 A builder that starts again on a blocked or stopped issue continues on the same
-branch and pull request.
+branch and pull request. Inside Working, core runs each issue through one state
+machine: claiming, preparing a worktree, starting the builder, then following its
+pull request from open to green to ready. Each step is one action atelier takes
+and confirms, so a crash resumes where it stopped.
 
 ## What lives where
 

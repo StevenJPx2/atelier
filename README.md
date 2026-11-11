@@ -72,22 +72,33 @@ code at run time.
 
 ## Gates
 
-Language plugins name the gates; the forge plugin defines how they run in its CI.
-On GitHub, on every push to a pull request, `gates.yml` runs `atelier check` once
-per gate of the project's languages, each as its own check. The builder never
-runs them: a failed gate reaches it as a failed check, through sourcefed.
+atelier finds a project's languages, and where each lives, by itself. Each language
+plugin finds its roots, the directories its gates run in, so one repository can
+hold Rust in one directory and TLA+ specs in another, each with its own gates.
+Language plugins name the gates; the forge plugin defines how its CI runs them.
 
 ```mermaid
 flowchart LR
-    Push["push to the<br/>pull request"] --> CI["gates.yml<br/>one job per gate"]
-    CI --> Check["atelier check --gate"]
-    Plugins["rust and tla plugins<br/>gates as commands"] --> Check
-    Check --> Run["a check run<br/>on the pull request"]
+    Lang["Language plugins<br/>roots and their gates"] --> Forge["Forge plugin<br/>writes its CI"]
+    Forge --> CI["Forge CI<br/>one job per gate"]
+    CI -- "atelier check --gate" --> Check["the gate's command"]
+    Check -- "pass or fail" --> PR["a check on<br/>the pull request"]
 ```
 
-- **rust**: fmt, Clippy with `-D warnings`, nextest, doc tests, cargo-mutants on
-  the pull request's diff (`--in-diff`), and Kani when a crate has proofs.
-- **tla**: TLC on each `*.tla` spec, in a project of any language.
+```text
+.      rust/clippy     pass    21 s
+.      rust/mutants    pass   130 s   14 mutants in the diff, 14 caught
+specs  tla/tlc         pass     3 s   tick.tla
+```
+
+On a pull request, CI runs the gates of each root the diff touches. The builder
+never runs them: a failed gate reaches it as a failed check, through sourcefed.
+
+- **rust**: a root is a Cargo workspace or a crate outside one. fmt, Clippy with
+  `-D warnings`, nextest, doc tests, cargo-mutants on the pull request's diff
+  (`--in-diff`), and Kani when a crate has proofs.
+- **tla**: a root is a directory with `*.tla` specs. TLC on each, in a project of
+  any language.
 
 ## An issue's states
 
@@ -120,22 +131,25 @@ branch and pull request.
 
 | atelier holds              | A project holds                                 |
 | -------------------------- | ----------------------------------------------- |
-| Core, plugins, CLI         | `.atelier/config.toml`: base, plugins, limits   |
+| Core, plugins, CLI         | `.atelier/config.toml`: only what differs       |
 | Builder and critic prompts | `AGENTS.md`: how to build, test and record it   |
 | `gates.yml`, from `github` | `.github/workflows/atelier.yml`, which calls it |
 | The pull request template  |                                                 |
 
+Every setting has a default found from the project: the base is the forge's
+default branch, the tracker and forge come from the `origin` remote, and the
+languages from their roots. The config holds only what differs. Chauffeur's is one
+line; another project might turn checks off under a path:
+
 ```toml
 # .atelier/config.toml
 base = "v2"
-tracker = "github"
-forge = "github"
-agent = "opencode"
-languages = ["rust", "tla"]
 
 [limits]
-red_rounds = 5      # failed CI rounds before the builder stops
-critic_rounds = 2
+red_rounds = 5      # failed CI rounds before the builder stops, the default
+
+[paths."vendor"]
+languages = []      # nothing under vendor/ is checked
 ```
 
 ## Pull requests

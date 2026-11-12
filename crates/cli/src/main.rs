@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod daemon;
 mod gates;
+mod hook;
 mod log;
 mod paths;
 mod plugins;

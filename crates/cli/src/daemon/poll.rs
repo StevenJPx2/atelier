@@ -45,7 +45,7 @@ pub fn spawn(
 }
 
 fn run(entry: &Entry, paths: &Paths, writer: &Writer, stop: &AtomicBool) {
-    let git = Git::new(paths.worktrees());
+    let git = Git::new(paths.worktrees()).with_hooks(paths.hooks());
     let mut failures: u32 = 0;
     let mut state = match writer.load(&entry.repo) {
         Ok(state) => state,

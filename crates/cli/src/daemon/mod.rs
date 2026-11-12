@@ -13,6 +13,7 @@ use std::time::Duration;
 
 use color_eyre::eyre::Result;
 
+use crate::hook;
 use crate::log::log;
 use crate::paths::Paths;
 use crate::projects;
@@ -27,14 +28,17 @@ struct Running {
 }
 
 /// Runs until the process is stopped. State is written before every action,
-/// so stopping at any moment loses nothing.
+/// so stopping at any moment loses nothing. It writes the builders'
+/// pre-commit hook first, so the hook calls this atelier.
 ///
 /// # Errors
 ///
-/// Another daemon holds the lock, or the state cannot be read.
+/// Another daemon holds the lock, the state cannot be read, or the hook
+/// cannot be written.
 pub fn run(paths: &Paths) -> Result<()> {
     let _lock = lock::take(&paths.lock())?;
     let writer = writer::start(paths.state_file())?;
+    hook::write(&paths.hooks(), &std::env::current_exe()?)?;
     let mut running: BTreeMap<String, Running> = BTreeMap::new();
 
     log(

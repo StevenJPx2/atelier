@@ -7,7 +7,9 @@ slice before the next one starts.
 flowchart LR
     Setup["0: Setup<br/>implemented"] --> Loop["1: The loop<br/>implemented"]
     Loop --> Gates["2: Gates<br/>implemented"]
-    Gates --> Languages["3–5: Language plugins<br/>planned"]
+    Gates --> Pipelines["3: Pipelines of steps<br/>planned"]
+    Pipelines --> Schedule["4: A schedule trigger<br/>planned"]
+    Schedule --> Languages["5–7: Language plugins<br/>planned"]
 ```
 
 | Slice                                   | Status                    | Plan                          |

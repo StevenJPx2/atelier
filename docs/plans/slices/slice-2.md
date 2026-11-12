@@ -198,9 +198,10 @@ file touches the deepest roots that hold it, and `docsite/` is not inside
 `docs`; with no diff every root runs, in order; an empty diff runs nothing;
 `checks = []` empties a subtree, even for a root above it; `checks` keeps
 the plugins it names; `skip` drops a gate and the deepest override wins;
-fixes follow the files and the overrides; found plugins always run, named
+fixes follow the files and the overrides; a plugin finds its roots and reads
+its manifests through the tree; found plugins always run, named
 ones only when named, and an unknown name is refused. A doc test plans one
-root of two. Mutation testing over the diff: 25 mutants, 19 caught, 6
+root of two. Mutation testing over the diff: 68 mutants, 53 caught, 15
 unviable.
 
 ### The `commands` plugin (`plugins/commands`)

@@ -5,7 +5,8 @@
 `brew services start atelier`: a labelled issue becomes a builder and a ready
 pull request. Gates, language plugins, the critic and recordings are the
 approved design below, planned for later slices. See the
-[slice index](docs/plans/README.md).
+[slice index](docs/plans/README.md), or read every page as a site at
+[atelier-docs.stevenjpx2.workers.dev](https://atelier-docs.stevenjpx2.workers.dev).
 
 A personal software factory. You plan a feature as a GitHub issue and add the
 `atelier:build` label. atelier starts a builder agent in its own worktree, which

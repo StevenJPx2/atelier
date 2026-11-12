@@ -1,4 +1,4 @@
-//! Starting and interrupting a builder's session.
+//! Starting, telling and interrupting a builder's session.
 
 use std::path::Path;
 
@@ -53,6 +53,18 @@ impl Agent for OpenCode {
             "post",
             &format!("/api/session/{}/interrupt", session.id),
             None,
+        )?;
+        Ok(())
+    }
+
+    /// Prompts the session with `text`; an idle one starts a turn.
+    fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError> {
+        let prompt = json!({ "text": text }).to_string();
+
+        self.api(
+            "post",
+            &format!("/api/session/{}/prompt", session.id),
+            Some(&prompt),
         )?;
         Ok(())
     }

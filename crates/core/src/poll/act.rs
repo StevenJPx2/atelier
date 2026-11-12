@@ -4,6 +4,11 @@ use crate::{
     WorktreeRequest, events, step,
 };
 
+/// What the builder hears when every check passed; nothing else tells it of
+/// passing checks.
+const GREEN: &str = "Every check passed on your pull request. Mark it ready, comment on the \
+                     issue, and keep answering reviews until the merge.";
+
 /// The most steps one issue takes in one poll. A start takes four and a
 /// merge one, so this only stops a fault from looping.
 const MAX_STEPS: usize = 32;
@@ -205,6 +210,11 @@ fn perform(
         Action::Interrupt => {
             if let Some(session) = &record.session {
                 context.plugins.agent.interrupt(session)?;
+            }
+        }
+        Action::TellGreen => {
+            if let Some(session) = &record.session {
+                context.plugins.agent.tell(session, GREEN)?;
             }
         }
         Action::StartStage(index) => {

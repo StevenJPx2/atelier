@@ -78,6 +78,10 @@ fn step_keeps_its_promises(count: u8) {
         assert!(last || straight);
     }
 
+    let entered_green =
+        matches!(next, Phase::Green { .. }) && !matches!(phase, Phase::Green { .. });
+    assert_eq!(has(Action::TellGreen), entered_green);
+
     if event == Event::Merged && phase.has_pull_request() {
         assert!(has(Action::CloseIssue));
     }

@@ -9,7 +9,8 @@ and daemon. Then the end-to-end run.
 
 You can label an issue `atelier:build` in a watched project and, within a
 poll, find a builder working on it in its own worktree. It opens a draft pull
-request, fixes what CI reports, and marks it ready when every check passes.
+request, fixes what CI reports, and marks it ready once atelier tells it every
+check passed.
 
 ```sh
 gh issue edit 12 --add-label atelier:build
@@ -124,6 +125,7 @@ pub enum Action {
     CommentSession,
     StartStage(u8),
     Interrupt,
+    TellGreen,
     CloseIssue,
     RemoveWorktree,
     Comment(Reason),
@@ -154,6 +156,8 @@ pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Acti
 
 `step` is one `match`. Every way out of a working phase removes the working
 mark; every way out after Starting, except a merge, interrupts the builder.
+Entering Green tells the builder so, since sourcefed suppresses passing
+checks and nothing else would wake it to mark the pull request ready.
 Requesting a blocked issue again also removes its blocked mark. Blocking adds
 three actions: unmark working, mark blocked, and a comment saying why.
 
@@ -244,6 +248,7 @@ pub trait Forge {
 pub trait Agent {
     fn start(&self, worktree: &Path, brief: &Brief) -> Result<Session, PluginError>;
     fn interrupt(&self, session: &Session) -> Result<(), PluginError>;
+    fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError>;
 }
 
 pub struct WorktreeRequest<'a> {
@@ -433,6 +438,7 @@ to 40 characters, and its worktree folder `issue-<id>`.
   assert next == Green, entered,
          implies (phase == Stage(stages - 1) and event == StagePassed)
               or (phase == Open and event == AllPassed and stages == 0)
+  assert actions has TellGreen == (next == Green, entered)
   assert event == Merged and has_pull_request(phase) implies actions has CloseIssue
   assert next.rounds <= red_rounds and next is Stage(i) implies i < stages
   assert next == phase implies actions is empty
@@ -445,8 +451,8 @@ to 40 characters, and its worktree folder `issue-<id>`.
   a transient failure retries and keeps the listing unconfirmed; a permanent
   start failure blocks; a blocked issue requested again keeps its branch; the
   working mark removed or the issue closed stops the builder; failed rounds
-  block at the limit; checks, ready and a merge close the issue and remove the
-  worktree; a pull request closed unmerged blocks; an issue marked working that
+  block at the limit; passing checks tell the builder once per green, then
+  ready and a merge close the issue and remove the worktree; a pull request closed unmerged blocks; an issue marked working that
   atelier never took is blocked; a finished issue is not read again.
 - **Mutation testing** over `crates/core`.
 
@@ -668,8 +674,8 @@ The forge asks one GraphQL query for the newest pull request on the branch,
 with its last 100 commits' combined check state. A failed round is a commit
 whose checks failed or errored; the head's checks are pending until they
 report. The brief tells the builder to open the pull request as a draft,
-watch it with a sourcefed `github` monitor and mark it ready with
-`gh pr ready`; `gh pr merge` and `gh release` are denied.
+watch it with a sourcefed `github` monitor and, once atelier tells it every
+check passed, mark it ready with `gh pr ready`; `gh pr merge` and `gh release` are denied.
 
 #### Verification
 
@@ -702,6 +708,9 @@ let session = opencode.start(&worktree, &brief)?;
 //                    "location": {"directory": "<worktree>"}, "permissions": [...]}
 // post /api/session/ses_…/prompt {"text": "<the brief>"}
 // → Session { id: "ses_…", title: "#12 Fix the dead link" }
+
+opencode.tell(&session, "Every check passed on your pull request. …")?;
+// post /api/session/ses_…/prompt {"text": "Every check passed …"}
 
 opencode.interrupt(&session)?;
 ```
@@ -748,8 +757,9 @@ pub fn rules(brief: &Brief) -> Vec<Rule>;
 
 A stand-in `opencode` replays what OpenCode v2.2.7 printed: a builder starts
 as a session in its worktree with its rules, then gets its brief; a session
-whose prompt fails is deleted; interrupting an idle session succeeds and a
-missing one fails for good; a reply that is not a session is refused; it is
+whose prompt fails is deleted; telling a session prompts it, and a missing one
+fails for good; interrupting an idle session succeeds and a missing one fails
+for good; a reply that is not a session is refused; it is
 the build's agent under its name.
 
 Once against the real OpenCode, on demand, since it starts a model turn: a
@@ -904,7 +914,8 @@ Tests run the real binary with real git, a real `origin` reached as
 stand-ins for `gh` and `opencode` first on `PATH`, built from their captured
 replies; the `gh` stand-in keeps each issue's labels. A labelled issue gets
 one builder across polls and a restart, on its own branch, with one comment,
-and `status` shows it; a second daemon refuses to start, naming the first;
+and `status` shows it; `status` shows a builder's pull request without asking
+GitHub; passing checks wake the builder with one prompt; a second daemon refuses to start, naming the first;
 an issue assigned to someone else is left alone under your filter; a builder
 that cannot start blocks its issue; a plugin the build lacks fails that
 project by name; `init` makes the labels the project sets; `add` refuses

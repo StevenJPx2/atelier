@@ -89,6 +89,13 @@ pub trait Agent {
     ///
     /// The agent's failure.
     fn interrupt(&self, session: &Session) -> Result<(), PluginError>;
+
+    /// Sends the session `text`, which starts a turn when it is idle.
+    ///
+    /// # Errors
+    ///
+    /// The agent's failure.
+    fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError>;
 }
 
 /// A worktree an issue's builder works in.

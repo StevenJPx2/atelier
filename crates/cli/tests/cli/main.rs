@@ -18,6 +18,14 @@ fn sessions(sandbox: &Sandbox) -> usize {
     sandbox.opencode_calls().iter().filter(created).count()
 }
 
+fn prompts(sandbox: &Sandbox) -> Vec<String> {
+    sandbox
+        .opencode_calls()
+        .into_iter()
+        .filter(|call| call.contains("/prompt "))
+        .collect()
+}
+
 fn listings(sandbox: &Sandbox) -> usize {
     sandbox
         .gh_calls()
@@ -94,6 +102,30 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
 }
 
 #[test]
+fn passing_checks_wake_the_builder_to_mark_its_pull_request_ready() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let daemon = sandbox.daemon();
+    sandbox.wait("a builder", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("building")
+    });
+
+    sandbox.open_pull_request("issue-12-fix-the-dead-link", 8, "SUCCESS");
+    sandbox.wait("the builder told", |sandbox| prompts(sandbox).len() >= 2);
+    let before = listings(&sandbox);
+    sandbox.wait("a later poll", |sandbox| listings(sandbox) >= before + 2);
+    drop(daemon);
+
+    let prompts = prompts(&sandbox);
+    assert_eq!(sandbox.phase("12").as_deref(), Some("green"));
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    assert!(
+        prompts[1].starts_with("api post /api/session/ses_e34e74974ffezeihakyxaDRnbK/prompt "),
+        "{prompts:?}"
+    );
+    assert!(prompts[1].contains("Every check passed"), "{prompts:?}");
+}
+
+#[test]
 fn status_shows_the_pull_request_a_builder_opened() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     let daemon = sandbox.daemon();
@@ -101,7 +133,7 @@ fn status_shows_the_pull_request_a_builder_opened() {
         sandbox.phase("12").as_deref() == Some("building")
     });
 
-    sandbox.open_pull_request("issue-12-fix-the-dead-link", 8);
+    sandbox.open_pull_request("issue-12-fix-the-dead-link", 8, "PENDING");
     sandbox.wait("the pull request", |sandbox| {
         sandbox.phase("12").as_deref() == Some("open")
     });

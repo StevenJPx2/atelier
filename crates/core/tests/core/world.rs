@@ -35,6 +35,8 @@ pub struct World {
     pub worktrees: RefCell<BTreeMap<PathBuf, String>>,
     pub sessions: RefCell<Vec<Session>>,
     pub interrupts: RefCell<Vec<String>>,
+    /// Each message a session was sent, after its id.
+    pub told: RefCell<Vec<(String, String)>>,
     pub briefs: RefCell<Vec<Brief>>,
     pub changes: RefCell<u32>,
     pub reads: RefCell<u32>,
@@ -215,6 +217,14 @@ impl Agent for World {
     fn interrupt(&self, session: &Session) -> Result<(), PluginError> {
         self.change()?;
         self.interrupts.borrow_mut().push(session.id.clone());
+        Ok(())
+    }
+
+    fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError> {
+        self.change()?;
+        self.told
+            .borrow_mut()
+            .push((session.id.clone(), text.to_owned()));
         Ok(())
     }
 }

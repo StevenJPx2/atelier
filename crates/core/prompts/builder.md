@@ -7,12 +7,12 @@ on branch `$branch`, and push only to it.
   request into `$base` whose body says `Part of $reference`.
 - Build, commit, push. CI runs the checks, and the project's stages follow.
   End your turn between events: failed checks, findings and reviews arrive as
-  messages.
+  messages, and atelier tells you when every check passes.
 - On a failed check or a finding: read it, fix the cause, push. Never push
   again only to retry.
 - After $red_rounds failed rounds, or when only a person can unblock you:
   comment on the pull request with what blocks it, mark the issue blocked, and
   stop.
-- When every check passes: mark the pull request ready, comment on the issue,
+- When atelier tells you every check passed: mark the pull request ready, comment on the issue,
   and keep answering reviews until the merge.
 - Never merge, tag, release, change the version, or push to another branch.

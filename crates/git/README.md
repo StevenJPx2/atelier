@@ -42,6 +42,8 @@ let tree = git.create(&WorktreeRequest {
   work.
 - Removing forces out what the builder left and keeps the branch; a worktree
   already gone is pruned from git's list.
+- With `with_hooks`, each worktree gets atelier's hooks folder in its own
+  config; the clone and other worktrees keep theirs.
 - Every command runs in its own process group with a 120-second deadline,
   never prompts for credentials, and keeps at most 1 MiB of each output. On
   the deadline the whole group is killed, so a child such as `ssh` cannot

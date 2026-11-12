@@ -7,15 +7,31 @@ use atelier_core::{PluginError, Repo, WorktreeRequest, Worktrees};
 use crate::command::{checked, git};
 use crate::folder;
 
-/// Worktrees under `root`, as `<root>/<owner>/<repo>/<name>`.
+/// Worktrees under `root`, as `<root>/<owner>/<repo>/<name>`, each with
+/// `hooks` as its own hooks folder when set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Git {
     root: PathBuf,
+    hooks: Option<PathBuf>,
 }
 
 impl Git {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            hooks: None,
+        }
+    }
+
+    /// Gives each worktree it makes or reuses `hooks` as its hooks folder,
+    /// through that worktree's own config, so the repository and its other
+    /// worktrees keep theirs.
+    #[must_use]
+    pub fn with_hooks(self, hooks: impl Into<PathBuf>) -> Self {
+        Self {
+            hooks: Some(hooks.into()),
+            ..self
+        }
     }
 
     fn path(&self, repo: &Repo, name: &str) -> Result<PathBuf, PluginError> {
@@ -40,48 +56,19 @@ impl Worktrees for Git {
         if path.exists() {
             let head = checked(&path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
 
-            return if head.trim() == branch {
-                Ok(path)
-            } else {
-                Err(PluginError::permanent(format!(
+            if head.trim() != branch {
+                return Err(PluginError::permanent(format!(
                     "{} is on {}, not {branch}",
                     path.display(),
                     head.trim()
-                )))
-            };
+                )));
+            }
+        } else {
+            make(request, &path)?;
         }
 
-        let local = request.local;
-        let target = path.to_string_lossy();
-        let head = format!("refs/heads/{branch}");
-        let tracking = format!("origin/{branch}");
-        let base = format!("origin/{}", request.base);
-
-        checked(local, &["fetch", "origin", request.base])?;
-
-        if git(local, &["show-ref", "--verify", "--quiet", &head])?.success {
-            checked(local, &["worktree", "add", &target, branch])?;
-        } else if remote(local, branch)? {
-            checked(local, &["fetch", "origin", branch])?;
-            checked(
-                local,
-                &[
-                    "worktree", "add", "--track", "-b", branch, &target, &tracking,
-                ],
-            )?;
-        } else {
-            checked(
-                local,
-                &[
-                    "worktree",
-                    "add",
-                    "--no-track",
-                    "-b",
-                    branch,
-                    &target,
-                    &base,
-                ],
-            )?;
+        if let Some(hooks) = &self.hooks {
+            give_hooks(request.local, &path, hooks)?;
         }
 
         Ok(path)
@@ -101,6 +88,77 @@ impl Worktrees for Git {
 
         Ok(())
     }
+}
+
+/// Makes the worktree at `path` from the branch, local or on `origin`, or
+/// a new branch from `origin/<base>`.
+fn make(request: &WorktreeRequest<'_>, path: &Path) -> Result<(), PluginError> {
+    let local = request.local;
+    let branch = request.branch;
+    let target = path.to_string_lossy();
+    let head = format!("refs/heads/{branch}");
+    let tracking = format!("origin/{branch}");
+    let base = format!("origin/{}", request.base);
+
+    checked(local, &["fetch", "origin", request.base])?;
+
+    if git(local, &["show-ref", "--verify", "--quiet", &head])?.success {
+        checked(local, &["worktree", "add", &target, branch])?;
+    } else if remote(local, branch)? {
+        checked(local, &["fetch", "origin", branch])?;
+        checked(
+            local,
+            &[
+                "worktree", "add", "--track", "-b", branch, &target, &tracking,
+            ],
+        )?;
+    } else {
+        checked(
+            local,
+            &[
+                "worktree",
+                "add",
+                "--no-track",
+                "-b",
+                branch,
+                &target,
+                &base,
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Gives the worktree `hooks` as its hooks folder, in its own config.
+///
+/// Per-worktree config needs `extensions.worktreeConfig`. With it, a bare
+/// repository's shared `core.bare` would apply to its worktrees too, so it
+/// moves to the repository's own `config.worktree` first, and no worktree
+/// is ever left reading it.
+fn give_hooks(local: &Path, worktree: &Path, hooks: &Path) -> Result<(), PluginError> {
+    let enabled = git(local, &["config", "--get", "extensions.worktreeConfig"])?;
+
+    if enabled.stdout.trim() != "true" {
+        let bare = checked(local, &["rev-parse", "--is-bare-repository"])?;
+
+        if bare.trim() == "true" {
+            let own = local.join("config.worktree");
+            let own = own.to_string_lossy();
+            checked(local, &["config", "--file", &own, "core.bare", "true"])?;
+            checked(local, &["config", "--unset", "core.bare"])?;
+        }
+
+        checked(local, &["config", "extensions.worktreeConfig", "true"])?;
+    }
+
+    let hooks = hooks.to_string_lossy();
+    checked(
+        worktree,
+        &["config", "--worktree", "core.hooksPath", &hooks],
+    )?;
+
+    Ok(())
 }
 
 fn remote(local: &Path, branch: &str) -> Result<bool, PluginError> {

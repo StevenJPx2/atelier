@@ -61,4 +61,9 @@ impl Paths {
     pub fn worktrees(&self) -> PathBuf {
         self.data.join("worktrees")
     }
+
+    /// The hooks folder builders' worktrees use, holding `pre-commit`.
+    pub fn hooks(&self) -> PathBuf {
+        self.data.join("hooks")
+    }
 }

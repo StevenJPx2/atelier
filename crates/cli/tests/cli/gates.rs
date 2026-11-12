@@ -7,6 +7,9 @@
 )]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+use std::process::Command;
 
 use crate::labelled;
 use crate::sandbox::{Sandbox, git};
@@ -29,10 +32,14 @@ run = "! grep -n '[a-z]' README.md"
 fix = "tr a-z A-Z < README.md > .upper && mv .upper README.md"
 "#;
 
-/// A sandbox whose `main` has the gates above, `Cargo.toml` and a lowercase
-/// `docs/README.md`, with the checkout on a branch from it.
+/// A sandbox whose `main` has the gates above, `Cargo.toml` and an
+/// uppercase `docs/README.md`, with the checkout on a branch from it.
 fn sandbox() -> Sandbox {
-    let sandbox = Sandbox::new(&labelled(&[]));
+    sandbox_labelled(&[])
+}
+
+fn sandbox_labelled(labels: &[&str]) -> Sandbox {
+    let sandbox = Sandbox::new(&labelled(labels));
     sandbox.config(CONFIG);
     let checkout = &sandbox.checkout;
     git(checkout, &["pull", "--quiet", "origin", "main"]);
@@ -183,4 +190,78 @@ fn a_gate_added_on_the_branch_is_not_run_until_it_is_on_the_base() {
     let (_, listed) = run(&sandbox, &["gates"]);
 
     assert!(!listed.contains("commands/extra"), "{listed}");
+}
+/// A git command as a builder runs it: with the sandbox's home, so
+/// `github.com` is the sandbox's own, and no `atelier` on `PATH`.
+fn builder_git(sandbox: &Sandbox, dir: &Path, args: &[&str]) -> std::process::Output {
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .env("HOME", &sandbox.home)
+        .env("PATH", "/usr/bin:/bin")
+        .env("GIT_AUTHOR_NAME", "builder")
+        .env("GIT_AUTHOR_EMAIL", "builder@example.com")
+        .env("GIT_COMMITTER_NAME", "builder")
+        .env("GIT_COMMITTER_EMAIL", "builder@example.com")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn a_builders_commit_is_fixed_by_its_hook_and_the_projects_hook_still_runs() {
+    let sandbox = sandbox_labelled(&["atelier:build"]);
+    let checkout = &sandbox.checkout;
+    git(checkout, &["switch", "--quiet", "main"]);
+    write(
+        &sandbox,
+        ".githooks/pre-commit",
+        "#!/bin/sh\ntouch \"$(git rev-parse --show-toplevel)/.ran\"\n",
+    );
+    let own = checkout.join(".githooks/pre-commit");
+    fs::set_permissions(&own, fs::Permissions::from_mode(0o755)).unwrap();
+    git(checkout, &["add", ".githooks"]);
+    git(checkout, &["commit", "--quiet", "-m", "the project's hook"]);
+    git(checkout, &["push", "--quiet", "origin", "main"]);
+
+    let daemon = sandbox.daemon();
+    sandbox.wait("a builder", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("building")
+    });
+    drop(daemon);
+
+    let worktree = sandbox
+        .home
+        .join(".local/share/atelier/worktrees/StevenJPx2/demo/issue-12");
+    let hook = sandbox.home.join(".local/share/atelier/hooks/pre-commit");
+    git(&sandbox.clone(), &["config", "core.hooksPath", ".githooks"]);
+    fs::write(worktree.join("docs/README.md"), "fixed by the hook\n").unwrap();
+    builder_git(&sandbox, &worktree, &["add", "docs/README.md"]);
+
+    let committed = builder_git(&sandbox, &worktree, &["commit", "--quiet", "-m", "docs"]);
+
+    let said = String::from_utf8_lossy(&committed.stderr).into_owned();
+    let hooks_of = |dir: &Path| {
+        String::from_utf8(builder_git(&sandbox, dir, &["config", "--get", "core.hooksPath"]).stdout)
+            .unwrap()
+    };
+    assert!(committed.status.success(), "{said}");
+    assert_eq!(
+        git(&worktree, &["show", "HEAD:docs/README.md"]),
+        "FIXED BY THE HOOK"
+    );
+    assert!(
+        worktree.join(".ran").exists(),
+        "the project's hook did not run"
+    );
+    assert_eq!(
+        fs::metadata(&hook).unwrap().permissions().mode() & 0o111,
+        0o111
+    );
+    assert_eq!(
+        hooks_of(&worktree).trim(),
+        hook.parent().unwrap().to_str().unwrap()
+    );
+    assert_eq!(hooks_of(checkout), "");
+    assert_eq!(hooks_of(&sandbox.clone()).trim(), ".githooks");
 }

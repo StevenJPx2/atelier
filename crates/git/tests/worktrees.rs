@@ -27,6 +27,21 @@ impl Drop for Scratch {
     }
 }
 
+/// Whether the worktree at `dir` has a hooks folder of its own.
+fn hooks_of(dir: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["config", "--get", "core.hooksPath"])
+        .output()
+        .expect("git runs");
+
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8(output.stdout).unwrap().trim().to_owned())
+}
+
 fn run(dir: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .arg("-C")
@@ -328,4 +343,67 @@ fn a_repository_reads_its_origin_its_default_branch_and_files_there() {
     assert_eq!(missing, None);
     assert!(unknown.is_permanent());
     assert!(!unfetchable.is_permanent());
+}
+#[test]
+fn a_worktree_gets_its_own_hooks_and_the_clone_stays_bare() {
+    let fixture = Fixture::new();
+    let hooks = fixture.scratch.0.join("hooks");
+    let with_hooks = Git::new(fixture.scratch.0.join("worktrees")).with_hooks(&hooks);
+    let plain = fixture.git.create(&WorktreeRequest {
+        name: "issue-13",
+        ..fixture.request("issue-13-plain")
+    });
+
+    let tree = with_hooks.create(&fixture.request(BRANCH)).unwrap();
+    let again = with_hooks.create(&fixture.request(BRANCH)).unwrap();
+
+    assert_eq!(again, tree);
+    assert_eq!(hooks_of(&tree).as_deref(), Some(hooks.to_str().unwrap()));
+    assert_eq!(hooks_of(&plain.unwrap()), None);
+    assert_eq!(hooks_of(&fixture.local), None);
+    assert_eq!(run(&tree, &["rev-parse", "--is-bare-repository"]), "false");
+    assert_eq!(
+        run(&fixture.local, &["rev-parse", "--is-bare-repository"]),
+        "true"
+    );
+    assert_eq!(run(&tree, &["status", "--short"]), "");
+}
+
+#[test]
+fn a_reused_worktree_gets_its_hooks_too() {
+    let fixture = Fixture::new();
+    let hooks = fixture.scratch.0.join("hooks");
+    let tree = fixture.git.create(&fixture.request(BRANCH)).unwrap();
+
+    Git::new(fixture.scratch.0.join("worktrees"))
+        .with_hooks(&hooks)
+        .create(&fixture.request(BRANCH))
+        .unwrap();
+
+    assert_eq!(hooks_of(&tree).as_deref(), Some(hooks.to_str().unwrap()));
+}
+
+#[test]
+fn a_worktree_of_a_checkout_gets_hooks_and_the_checkout_keeps_its_own() {
+    let fixture = Fixture::new();
+    let root = &fixture.scratch.0;
+    run(root, &["clone", "--quiet", "origin.git", "checkout"]);
+    let checkout = root.join("checkout");
+    let hooks = root.join("hooks");
+    let git = Git::new(root.join("worktrees")).with_hooks(&hooks);
+
+    let tree = git
+        .create(&WorktreeRequest {
+            local: &checkout,
+            ..fixture.request(BRANCH)
+        })
+        .unwrap();
+
+    assert_eq!(hooks_of(&tree).as_deref(), Some(hooks.to_str().unwrap()));
+    assert_eq!(hooks_of(&checkout), None);
+    assert_eq!(
+        run(&checkout, &["rev-parse", "--is-bare-repository"]),
+        "false"
+    );
+    assert_eq!(run(&checkout, &["status", "--short"]), "");
 }

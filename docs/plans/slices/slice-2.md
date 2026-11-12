@@ -1,8 +1,8 @@
 # Slice 2: run a project's gates
 
 **Status: In progress.** The checks role in core, the `commands` plugin,
-and `atelier gates`, `check` and `fix` are built. Next come the commit
-hook, GitHub's CI, and atelier checking itself.
+`atelier gates`, `check` and `fix`, and the commit hook are built. Next
+come GitHub's CI and atelier checking itself.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -412,9 +412,43 @@ fails in CI instead.
 
 Files: `crates/git/src/worktree.rs`, `crates/cli/src/hook.rs`.
 
-Verified in temporary repositories: an unformatted staged file is committed
-formatted; a partly staged file is committed as staged; the project's hook
-still runs; the checkout and other worktrees have no atelier hook.
+#### Structure
+
+`Git` gives each worktree it makes or reuses the hooks folder, in that
+worktree's own config. Turning on per-worktree config would make a bare
+clone's shared `core.bare` apply to its worktrees, so it moves to the
+clone's own `config.worktree` first, in an order that never leaves a
+worktree reading it.
+
+```rust
+impl Git {
+    pub fn with_hooks(self, hooks: impl Into<PathBuf>) -> Self;
+}
+```
+
+The hook calls `atelier` from `PATH`, or the daemon's own binary when it is
+not there. The daemon writes it at each start, so it calls the atelier
+running.
+
+```rust
+pub fn write(hooks: &Path, exe: &Path) -> Result<PathBuf>;
+
+impl Paths {
+    pub fn hooks(&self) -> PathBuf;
+}
+```
+
+#### Verification
+
+Through the real binary: the daemon claims an issue and makes its worktree
+with the hook; the project has its own hook, set as a hook manager sets it;
+a commit in the worktree, with no `atelier` on `PATH`, is committed fixed,
+the project's hook runs, and neither the checkout nor the clone gains a
+hooks folder. Against real repositories: a worktree gets the hooks folder
+and still works while the clone stays bare; a worktree made without it has
+none; a reused worktree gets it; a worktree of a checkout gets it and the
+checkout keeps its own. `fix --staged` leaving a partly staged file as
+staged is verified with running gates.
 
 ### GitHub's CI (`plugins/github`, `.github/workflows/gates.yml`)
 

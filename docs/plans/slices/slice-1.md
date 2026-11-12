@@ -958,7 +958,7 @@ impl Built<'_> {
 }
 ```
 
-The daemon. The supervisor rereads `projects.toml` every 30 s, starting a
+The daemon. The supervisor rereads `projects.toml` every 5 s, starting a
 thread for each new project and stopping one removed. A project's thread
 polls every `poll` seconds, 5 s after acting, and on failure backs off as
 long as a rate limit asks, otherwise 30 s doubling to 10 minutes. Each save

@@ -19,7 +19,7 @@ sequenceDiagram
 | File             | Holds                                                                   |
 | ---------------- | ----------------------------------------------------------------------- |
 | `lib.rs`         | `OpenCode`, and `Plugin`: registers the agent                           |
-| `session.rs`     | Starting a session with its brief, and interrupting it                  |
+| `session.rs`     | Starting a session with its brief, telling it, and interrupting it      |
 | `permissions.rs` | The brief's denials as the session's permission rules                   |
 | `api.rs`         | `opencode api` with a 30-second deadline; 4xx permanent, else transient |
 
@@ -29,6 +29,8 @@ let opencode = OpenCode::new();
 let session = opencode.start(&worktree, &brief)?;
 // → Session { id: "ses_…", title: "#12 Fix the dead link" }
 
+opencode.tell(&session, "Every check passed on your pull request. …")?;
+
 opencode.interrupt(&session)?;
 ```
 
@@ -37,4 +39,6 @@ opencode.interrupt(&session)?;
   the question tool denied, so it writes on the pull request instead of
   waiting. The last matching rule wins.
 - **A failed prompt** deletes the session, so no idle builder is left.
+- **Telling** prompts the session, and an idle one starts a turn: atelier
+  wakes the builder this way when every check passed.
 - **Interrupting** an idle session succeeds.

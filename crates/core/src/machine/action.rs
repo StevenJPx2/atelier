@@ -20,6 +20,9 @@ pub enum Action {
     CommentSession,
     StartStage(u8),
     Interrupt,
+    /// Tells the builder every check passed, since nothing else wakes it
+    /// for good news.
+    TellGreen,
     CloseIssue,
     RemoveWorktree,
     Comment(Reason),

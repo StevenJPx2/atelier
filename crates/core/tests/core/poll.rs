@@ -234,6 +234,11 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Green { rounds: 1 });
     assert_eq!(state.issues[&key()].pull_request, Some(31));
+    let told = world.told.borrow().clone();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert_eq!(told[0].0, "ses_0");
+    assert!(told[0].1.contains("Every check passed"), "{told:?}");
+    assert!(told[0].1.contains("Mark it ready"), "{told:?}");
 
     world.pulls.borrow_mut().remove(&branch);
     world.poll(&project, &mut state);
@@ -246,6 +251,16 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     set(open_pull(1, Checks::Pending, false));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Open { rounds: 1 });
+    assert_eq!(
+        world.told.borrow().len(),
+        1,
+        "told again without a new green"
+    );
+
+    set(open_pull(1, Checks::Passed, true));
+    world.poll(&project, &mut state);
+    assert_eq!(phase(&state), Phase::Green { rounds: 1 });
+    assert_eq!(world.told.borrow().len(), 2, "a new green is told");
 
     set(PullRequest::Merged { number: 32 });
     world.poll(&project, &mut state);

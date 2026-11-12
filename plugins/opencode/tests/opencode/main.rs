@@ -253,6 +253,46 @@ fn interrupting_succeeds_on_an_idle_session_and_fails_for_good_on_a_missing_one(
 }
 
 #[test]
+fn telling_prompts_the_session_and_fails_for_good_on_a_missing_one() {
+    let oc = StandIn::new(&[
+        Reply::Ok("prompt-accepted.json"),
+        Reply::Failed {
+            stdout: "session-not-found.json",
+            stderr: "session-not-found.stderr",
+        },
+    ]);
+    let opencode = oc.opencode();
+    let builder = Session {
+        id: CREATED.into(),
+        title: "#12".into(),
+    };
+    let gone = Session {
+        id: "ses_doesnotexist".into(),
+        title: "#13".into(),
+    };
+
+    opencode.tell(&builder, "Every check passed.").unwrap();
+    let error = opencode.tell(&gone, "Every check passed.").unwrap_err();
+
+    let calls = oc.calls();
+    assert_eq!(
+        calls[0][..3],
+        ["api", "post", &format!("/api/session/{CREATED}/prompt")]
+    );
+    assert_eq!(
+        body(&calls[0]),
+        serde_json::json!({ "text": "Every check passed." })
+    );
+    assert!(error.is_permanent());
+    assert!(
+        error
+            .message
+            .contains("Session not found: ses_doesnotexist"),
+        "{error}"
+    );
+}
+
+#[test]
 fn a_reply_that_is_not_a_session_is_refused() {
     let oc = StandIn::new(&[Reply::Ok("interrupted-idle.json")]);
 

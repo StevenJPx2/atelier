@@ -147,8 +147,8 @@ impl Forge for GitHub {
              `gh pr create --draft --repo {repo} --base {base} --head {branch}`. \
              Then watch it with a sourcefed monitor (`sourceType: \"github\"`, \
              repo {repo} and the pull request's number), so failed checks and \
-             reviews reach you as messages. When every check passes, mark it ready: \
-             `gh pr ready --repo {repo}` with its number."
+             reviews reach you as messages. When atelier tells you every check passed, \
+             mark it ready: `gh pr ready --repo {repo}` with its number."
         )
     }
 

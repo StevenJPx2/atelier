@@ -237,14 +237,14 @@ impl Sandbox {
             .flatten()
     }
 
-    /// Opens a draft pull request numbered `number` on `branch`, its checks
-    /// pending.
-    pub fn open_pull_request(&self, branch: &str, number: u64) {
+    /// Opens a draft pull request numbered `number` on `branch`, its checks'
+    /// rollup in `checks`, such as `PENDING` or `SUCCESS`.
+    pub fn open_pull_request(&self, branch: &str, number: u64, checks: &str) {
         let pull = serde_json::json!({ branch: {
             "number": number,
             "state": "OPEN",
             "isDraft": true,
-            "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "PENDING" } } }] }
+            "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": checks } } }] }
         }});
         let temporary = self.bin.join("pulls.json.tmp");
         fs::write(&temporary, pull.to_string()).unwrap();

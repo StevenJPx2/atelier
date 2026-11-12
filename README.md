@@ -32,10 +32,12 @@ sequenceDiagram
     Builder->>PR: draft pull request
     PR-->>Builder: failed check, via sourcefed
     Builder->>PR: fix and push
-    PR-->>Builder: every check passes
+    PR-->>Atelier: every check passes
     Atelier->>Critic: every check passed: review it
     Critic->>PR: findings with evidence
-    Builder->>PR: fix, record, mark ready
+    Builder->>PR: fix and record
+    Atelier->>Builder: every check and stage passed
+    Builder->>PR: mark ready
     PR-->>You: ready for review
 ```
 

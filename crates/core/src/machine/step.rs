@@ -85,7 +85,8 @@ pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Acti
     }
 }
 
-/// The `index`th stage, started; Green once there are no more.
+/// The `index`th stage, started; Green once there are no more, and the
+/// builder told so.
 fn stage(pipeline: &Pipeline, index: u8, rounds: u8) -> (Phase, Vec<Action>) {
     if index < pipeline.stages() {
         (
@@ -93,7 +94,7 @@ fn stage(pipeline: &Pipeline, index: u8, rounds: u8) -> (Phase, Vec<Action>) {
             vec![Action::StartStage(index)],
         )
     } else {
-        (Phase::Green { rounds }, vec![])
+        (Phase::Green { rounds }, vec![Action::TellGreen])
     }
 }
 
@@ -232,7 +233,11 @@ mod tests {
                     (OPEN, vec![]),
                 ),
                 (OPEN, Event::RoundFailed, block(Reason::RedRounds, true)),
-                (OPEN, Event::AllPassed, (Phase::Green { rounds: 1 }, vec![])),
+                (
+                    OPEN,
+                    Event::AllPassed,
+                    (Phase::Green { rounds: 1 }, vec![Action::TellGreen]),
+                ),
                 (
                     Phase::Green { rounds: 1 },
                     Event::MarkedReady,
@@ -276,7 +281,7 @@ mod tests {
                 (
                     stage(1),
                     Event::StagePassed,
-                    (Phase::Green { rounds: 1 }, vec![]),
+                    (Phase::Green { rounds: 1 }, vec![Action::TellGreen]),
                 ),
                 (stage(1), Event::Pushed, (OPEN, vec![])),
                 (

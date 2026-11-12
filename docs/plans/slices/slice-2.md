@@ -6,7 +6,7 @@ on atelier and on a fixture repository pass.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
-already formatted and lint-fixed. Until the language plugins of slices 3 to 5
+already formatted and lint-fixed. Until the language plugins of slices 5 to 7
 find a project's gates by themselves, a project lists its gates as commands,
 and atelier checks itself this way.
 

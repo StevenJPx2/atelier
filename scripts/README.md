@@ -60,7 +60,7 @@ uvx ruff@0.17.4 format --check scripts
 uvx ruff@0.17.4 check scripts
 ```
 
-The proof is the real boundary, not unit tests. The package job in `check.yml`
+The proof is the real boundary, not unit tests. `package.yml`
 builds, packages and runs the binary on Linux and macOS. The release workflow
 does the same on each target, then the protected tap job runs `brew style`,
 `brew audit --strict --online`, install and `brew test` on the real formula.

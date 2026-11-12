@@ -6,7 +6,7 @@ use crate::{Agent, Filter, Forge, Pipeline, Repo, Tracker, Worktrees};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     pub repo: Repo,
-    pub checkout: PathBuf,
+    pub local: PathBuf,
     pub base: String,
     pub pipeline: Pipeline,
 }

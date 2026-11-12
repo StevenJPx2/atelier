@@ -102,7 +102,7 @@ pub trait Agent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorktreeRequest<'a> {
     pub repo: &'a Repo,
-    pub checkout: &'a Path,
+    pub local: &'a Path,
     pub name: &'a str,
     pub branch: &'a str,
     pub base: &'a str,
@@ -122,5 +122,5 @@ pub trait Worktrees {
     /// # Errors
     ///
     /// Git's failure.
-    fn remove(&self, checkout: &Path, worktree: &Path) -> Result<(), PluginError>;
+    fn remove(&self, local: &Path, worktree: &Path) -> Result<(), PluginError>;
 }

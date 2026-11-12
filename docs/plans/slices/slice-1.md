@@ -272,7 +272,7 @@ pub trait Agent {
 
 pub struct WorktreeRequest<'a> {
     pub repo: &'a Repo,
-    pub checkout: &'a Path,
+    pub local: &'a Path,
     pub name: &'a str,
     pub branch: &'a str,
     pub base: &'a str,
@@ -280,7 +280,7 @@ pub struct WorktreeRequest<'a> {
 
 pub trait Worktrees {
     fn create(&self, request: &WorktreeRequest<'_>) -> Result<PathBuf, PluginError>;
-    fn remove(&self, checkout: &Path, worktree: &Path) -> Result<(), PluginError>;
+    fn remove(&self, local: &Path, worktree: &Path) -> Result<(), PluginError>;
 }
 ```
 
@@ -373,7 +373,7 @@ issue; any other failure leaves the action pending and is reported. The
 listing tags are kept only when every issue succeeded.
 
 ```rust
-pub struct Project { pub repo: Repo, pub checkout: PathBuf, pub base: String, pub pipeline: Pipeline }
+pub struct Project { pub repo: Repo, pub local: PathBuf, pub base: String, pub pipeline: Pipeline }
 
 pub struct Source<'a> { pub name: &'a str, pub tracker: &'a dyn Tracker, pub filter: Filter }
 
@@ -495,7 +495,7 @@ let git = Git::new("/Users/me/.local/share/atelier/worktrees");
 
 let tree = git.create(&WorktreeRequest {
     repo: &Repo("StevenJPx2/chauffeur".into()),
-    checkout: Path::new("/Users/me/Documents/Projects/chauffeur"),
+    local: Path::new("/Users/me/Documents/Projects/chauffeur"),
     name: "issue-12",
     branch: "issue-12-fix-the-dead-link",
     base: "v2",
@@ -851,7 +851,7 @@ pub struct Resolved {
     pub shown: Vec<(&'static str, String, Origin)>,
 }
 
-pub fn resolve(entry: &Entry, checkout: &Checkout) -> Result<Resolved>;
+pub fn resolve(entry: &Entry, local: &Repository) -> Result<Resolved>;
 pub fn settings(table: toml::Table) -> Result<Settings>;
 pub fn platform(url: &str) -> Result<&'static str>;
 pub fn repo_from_url(url: &str) -> Option<String>;

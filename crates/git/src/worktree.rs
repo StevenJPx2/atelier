@@ -68,27 +68,27 @@ impl Worktrees for Git {
             };
         }
 
-        let checkout = request.checkout;
+        let local = request.local;
         let target = path.to_string_lossy();
-        let local = format!("refs/heads/{branch}");
+        let head = format!("refs/heads/{branch}");
         let tracking = format!("origin/{branch}");
         let base = format!("origin/{}", request.base);
 
-        checked(checkout, &["fetch", "origin", request.base])?;
+        checked(local, &["fetch", "origin", request.base])?;
 
-        if git(checkout, &["show-ref", "--verify", "--quiet", &local])?.success {
-            checked(checkout, &["worktree", "add", &target, branch])?;
-        } else if remote(checkout, branch)? {
-            checked(checkout, &["fetch", "origin", branch])?;
+        if git(local, &["show-ref", "--verify", "--quiet", &head])?.success {
+            checked(local, &["worktree", "add", &target, branch])?;
+        } else if remote(local, branch)? {
+            checked(local, &["fetch", "origin", branch])?;
             checked(
-                checkout,
+                local,
                 &[
                     "worktree", "add", "--track", "-b", branch, &target, &tracking,
                 ],
             )?;
         } else {
             checked(
-                checkout,
+                local,
                 &[
                     "worktree",
                     "add",
@@ -106,20 +106,20 @@ impl Worktrees for Git {
 
     /// Removes the worktree, even with changes the builder left, and keeps
     /// its branch. A worktree already gone is pruned from git's list.
-    fn remove(&self, checkout: &Path, worktree: &Path) -> Result<(), PluginError> {
+    fn remove(&self, local: &Path, worktree: &Path) -> Result<(), PluginError> {
         if worktree.exists() {
             let target = worktree.to_string_lossy();
-            checked(checkout, &["worktree", "remove", "--force", &target])?;
+            checked(local, &["worktree", "remove", "--force", &target])?;
         } else {
-            checked(checkout, &["worktree", "prune"])?;
+            checked(local, &["worktree", "prune"])?;
         }
 
         Ok(())
     }
 }
 
-fn remote(checkout: &Path, branch: &str) -> Result<bool, PluginError> {
-    let heads = checked(checkout, &["ls-remote", "--heads", "origin", branch])?;
+fn remote(local: &Path, branch: &str) -> Result<bool, PluginError> {
+    let heads = checked(local, &["ls-remote", "--heads", "origin", branch])?;
 
     Ok(!heads.trim().is_empty())
 }

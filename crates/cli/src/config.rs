@@ -6,7 +6,7 @@ use std::fmt;
 use std::time::Duration;
 
 use atelier_core::{Pipeline, Project, Repo, Setting, Settings};
-use atelier_git::Checkout;
+use atelier_git::Repository;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 use serde::Deserialize;
 
@@ -66,7 +66,7 @@ pub struct Resolved {
     pub shown: Vec<(&'static str, String, Origin)>,
 }
 
-/// The project's settings: found from its checkout and `origin`, with the
+/// The project's settings: found from its local repository and `origin`, with the
 /// config read from `origin`'s default branch for `base`, and from
 /// `origin/<base>` for everything else.
 ///
@@ -74,29 +74,29 @@ pub struct Resolved {
 ///
 /// `origin` cannot be reached or is not a forge atelier knows, the config is
 /// not valid, or it names a step no plugin in this build provides.
-pub fn resolve(entry: &Entry, checkout: &Checkout) -> Result<Resolved> {
-    let url = checkout.origin()?;
+pub fn resolve(entry: &Entry, local: &Repository) -> Result<Resolved> {
+    let url = local.origin()?;
     let platform = platform(&url)?;
     let found = repo_from_url(&url).ok_or_else(|| eyre!("cannot read a repository from {url}"))?;
 
     if !found.eq_ignore_ascii_case(&entry.repo) {
         bail!(
             "{} has origin {found}, not {}",
-            checkout.path().display(),
+            local.path().display(),
             entry.repo
         );
     }
 
-    let default = checkout.default_branch()?;
-    checkout.fetch(&default)?;
-    let first = parse(checkout.show(&default, CONFIG)?.as_deref(), &default)?;
+    let default = local.default_branch()?;
+    local.fetch(&default)?;
+    let first = parse(local.show(&default, CONFIG)?.as_deref(), &default)?;
 
     let (base, file) = match first.base.clone() {
         Some(base) if base != default => {
-            checkout.fetch(&base)?;
+            local.fetch(&base)?;
             (
                 base.clone(),
-                parse(checkout.show(&base, CONFIG)?.as_deref(), &base)?,
+                parse(local.show(&base, CONFIG)?.as_deref(), &base)?,
             )
         }
         Some(base) => (base, first.clone()),
@@ -104,7 +104,7 @@ pub fn resolve(entry: &Entry, checkout: &Checkout) -> Result<Resolved> {
     };
 
     let origin = |set: bool| if set { Origin::Set } else { Origin::Found };
-    let mut resolved = build(entry, checkout, platform, base, file)?;
+    let mut resolved = build(entry, local, platform, base, file)?;
     resolved.shown.insert(
         0,
         (
@@ -119,7 +119,7 @@ pub fn resolve(entry: &Entry, checkout: &Checkout) -> Result<Resolved> {
 
 fn build(
     entry: &Entry,
-    checkout: &Checkout,
+    local: &Repository,
     platform: &str,
     base: String,
     file: File,
@@ -171,7 +171,7 @@ fn build(
     Ok(Resolved {
         project: Project {
             repo: Repo(entry.repo.clone()),
-            checkout: checkout.path().to_owned(),
+            local: local.path().to_owned(),
             base,
             pipeline,
         },

@@ -1,4 +1,4 @@
-//! What atelier reads of a project's checkout and its `origin`.
+//! What atelier reads of a project's local repository and its `origin`.
 
 use std::path::{Path, PathBuf};
 
@@ -6,13 +6,13 @@ use atelier_core::PluginError;
 
 use crate::command::{checked, git};
 
-/// A project's local checkout.
+/// A project's local repository, bare or a checkout.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Checkout {
+pub struct Repository {
     path: PathBuf,
 }
 
-impl Checkout {
+impl Repository {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
@@ -27,7 +27,7 @@ impl Checkout {
     ///
     /// # Errors
     ///
-    /// The folder is not a checkout, or has no `origin`.
+    /// The folder is not a repository, or has no `origin`.
     pub fn origin(&self) -> Result<String, PluginError> {
         let url = checked(&self.path, &["config", "--get", "remote.origin.url"])?;
 

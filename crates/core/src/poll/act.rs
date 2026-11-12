@@ -250,7 +250,7 @@ fn build(
         (Action::CreateWorktree, _) => {
             let request = WorktreeRequest {
                 repo: &project.repo,
-                checkout: &project.checkout,
+                local: &project.local,
                 name: &Record::folder(&issue.key),
                 branch: &record.branch,
                 base: &project.base,
@@ -280,7 +280,7 @@ fn build(
             return Err(PluginError::permanent("the builder has no worktree"));
         }
         (Action::RemoveWorktree, Some(worktree)) => {
-            plugins.worktrees.remove(&project.checkout, &worktree)?;
+            plugins.worktrees.remove(&project.local, &worktree)?;
             record.worktree = None;
         }
         _ => {}

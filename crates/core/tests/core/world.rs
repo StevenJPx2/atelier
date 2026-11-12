@@ -49,7 +49,7 @@ pub struct World {
 pub fn project(stages: &[(&str, u8)]) -> Project {
     Project {
         repo: Repo("o/r".into()),
-        checkout: PathBuf::from("/checkout"),
+        local: PathBuf::from("/local"),
         base: "v2".into(),
         pipeline: Pipeline::new(3, stages.iter().copied()).unwrap(),
     }

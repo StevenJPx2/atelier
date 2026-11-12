@@ -12,7 +12,7 @@
 //!
 //! let tree = git.create(&WorktreeRequest {
 //!     repo: &repo,
-//!     checkout: Path::new("/Users/me/Documents/Projects/chauffeur"),
+//!     local: Path::new("/Users/me/Documents/Projects/chauffeur"),
 //!     name: "issue-12",
 //!     branch: "issue-12-fix-the-dead-link",
 //!     base: "v2",
@@ -21,9 +21,9 @@
 //! # Ok::<(), atelier_core::PluginError>(())
 //! ```
 
-mod checkout;
 mod command;
+mod repository;
 mod worktree;
 
-pub use checkout::Checkout;
+pub use repository::Repository;
 pub use worktree::Git;

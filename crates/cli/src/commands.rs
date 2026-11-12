@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use atelier_core::Repo;
-use atelier_git::Checkout;
+use atelier_git::Repository;
 use atelier_github::GitHub;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 
@@ -13,16 +13,16 @@ use crate::projects::{self, Entry};
 use crate::state;
 
 /// The checkout at `path`, and the project its `origin` names.
-fn here(path: &Path) -> Result<(Checkout, Entry)> {
+fn here(path: &Path) -> Result<(Repository, Entry)> {
     let path = path
         .canonicalize()
         .wrap_err_with(|| format!("{} is not a folder", path.display()))?;
-    let checkout = Checkout::new(&path);
-    let url = checkout.origin()?;
+    let local = Repository::new(&path);
+    let url = local.origin()?;
     let repo = repo_from_url(&url).ok_or_else(|| eyre!("cannot read a repository from {url}"))?;
 
     Ok((
-        checkout,
+        local,
         Entry {
             repo,
             path,
@@ -37,8 +37,8 @@ fn here(path: &Path) -> Result<(Checkout, Entry)> {
 ///
 /// The project's settings are not valid, or its tracker refuses.
 pub fn init(_paths: &Paths, path: &Path) -> Result<()> {
-    let (checkout, entry) = here(path)?;
-    let resolved = config::resolve(&entry, &checkout)?;
+    let (local, entry) = here(path)?;
+    let resolved = config::resolve(&entry, &local)?;
     let repo = Repo(entry.repo.clone());
 
     for spec in &resolved.trackers {
@@ -100,7 +100,7 @@ pub fn status(paths: &Paths) -> Result<()> {
     for entry in projects::read(&paths.projects())? {
         println!("{}  {}", entry.repo, entry.path.display());
 
-        match config::resolve(&entry, &Checkout::new(paths.expand(&entry.path))) {
+        match config::resolve(&entry, &Repository::new(paths.expand(&entry.path))) {
             Ok(resolved) => {
                 for (name, value, origin) in &resolved.shown {
                     println!("  {name:<11} {value:<24} {origin}");

@@ -25,7 +25,7 @@ let git = Git::new("/Users/me/.local/share/atelier/worktrees");
 
 let tree = git.create(&WorktreeRequest {
     repo: &Repo("StevenJPx2/chauffeur".into()),
-    checkout: Path::new("/Users/me/Documents/Projects/chauffeur"),
+    local: Path::new("/Users/me/Documents/Projects/chauffeur"),
     name: "issue-12",
     branch: "issue-12-fix-the-dead-link",
     base: "v2",

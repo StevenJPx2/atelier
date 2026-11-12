@@ -4,6 +4,7 @@ mod clone;
 mod commands;
 mod config;
 mod daemon;
+mod gates;
 mod log;
 mod paths;
 mod plugins;
@@ -43,6 +44,47 @@ enum Command {
     Daemon,
     /// Each project's settings, and each issue atelier is following.
     Status,
+    /// Each root of the checkout and its gates.
+    Gates {
+        /// Only the roots the changes since this base touch.
+        #[arg(long)]
+        diff: Option<String>,
+        /// As a JSON matrix, `[{"gate": …, "root": …}]`, as CI reads it.
+        #[arg(long)]
+        json: bool,
+        /// A folder in the checkout.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Run the gates the changes touch, or one gate in one root.
+    Check {
+        /// Measure changes from this base, not origin's base branch.
+        #[arg(long)]
+        diff: Option<String>,
+        /// The gate to run, such as commands/clippy.
+        #[arg(long, requires = "root")]
+        gate: Option<String>,
+        /// The root to run it in, such as `.`.
+        #[arg(long, requires = "gate")]
+        root: Option<String>,
+        /// Run each gate's setup first.
+        #[arg(long)]
+        setup: bool,
+        /// A folder in the checkout.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Run the fixes of the roots some files touch.
+    Fix {
+        /// The staged files, staged again once fixed.
+        #[arg(long, conflicts_with = "files")]
+        staged: bool,
+        /// Files, from the top of the checkout.
+        files: Vec<String>,
+        /// A folder in the checkout.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 fn main() -> Result<ExitCode> {
@@ -67,6 +109,27 @@ fn main() -> Result<ExitCode> {
         Command::Add { repo } => commands::add(&paths, &repo)?,
         Command::Daemon => daemon::run(&paths)?,
         Command::Status => commands::status(&paths)?,
+        Command::Gates { diff, json, path } => gates::list(&path, diff.as_deref(), json)?,
+        Command::Check {
+            diff,
+            gate,
+            root,
+            setup,
+            path,
+        } => {
+            let selection = gates::Selection {
+                diff: diff.as_deref(),
+                gate: gate.as_deref(),
+                root: root.as_deref(),
+                setup,
+            };
+            return gates::check(&path, &selection);
+        }
+        Command::Fix {
+            staged,
+            files,
+            path,
+        } => return gates::fix(&path, staged, &files),
     }
 
     Ok(ExitCode::SUCCESS)

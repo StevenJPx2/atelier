@@ -1,16 +1,18 @@
 //! The plugins this atelier is built with, and each project's choice of
 //! them.
 
-use atelier_core::{Agent, Filter, Forge, Plugin, Plugins, Registry, Source, Tracker};
+use atelier_commands::Commands;
+use atelier_core::{Agent, Checks, Filter, Forge, Plugin, Plugins, Registry, Source, Tracker};
 use atelier_git::Git;
 use atelier_github::GitHub;
 use atelier_opencode::OpenCode;
 use color_eyre::eyre::{Result, bail, eyre};
 
-use crate::config::Resolved;
+use crate::config::{CONFIG, Resolved};
 
 /// One instance of each plugin crate in the build.
 pub struct Build {
+    commands: Commands,
     github: GitHub,
     opencode: OpenCode,
 }
@@ -25,9 +27,47 @@ pub struct Built<'a> {
 impl Build {
     pub fn new() -> Self {
         Self {
+            commands: Commands,
             github: GitHub::new(),
             opencode: OpenCode::new(),
         }
+    }
+
+    fn registry(&self) -> Registry<'_> {
+        let list: [&dyn Plugin; 3] = [&self.commands, &self.github, &self.opencode];
+        Registry::new(&list)
+    }
+
+    /// The project's checks plugins, each built from its own table, by
+    /// name: every one found in each project, then each it names.
+    ///
+    /// # Errors
+    ///
+    /// A plugin the build lacks, or a setting its plugin cannot use.
+    pub fn checks(&self, resolved: &Resolved) -> Result<Vec<(&'static str, Box<dyn Checks + '_>)>> {
+        let named: Vec<String> = resolved
+            .checks
+            .iter()
+            .map(|spec| spec.plugin.clone())
+            .collect();
+        let registry = self.registry();
+        let mut built = Vec::new();
+
+        for (name, make) in registry.find_checks(&named)? {
+            let settings = resolved
+                .checks
+                .iter()
+                .find(|spec| spec.plugin == name)
+                .map(|spec| spec.settings.clone())
+                .unwrap_or_default();
+            let checks = make
+                .make(&settings)
+                .map_err(|error| eyre!("{CONFIG}: {name}.{error}"))?;
+
+            built.push((name, checks));
+        }
+
+        Ok(built)
     }
 
     /// The project's trackers, forge and agent, by the names it resolved.
@@ -37,8 +77,7 @@ impl Build {
     /// A plugin the build lacks, two trackers from one plugin, or a tracker
     /// setting its plugin cannot use.
     pub fn plugins(&self, resolved: &Resolved) -> Result<Built<'_>> {
-        let list: [&dyn Plugin; 2] = [&self.github, &self.opencode];
-        let registry = Registry::new(&list);
+        let registry = self.registry();
         let mut trackers = Vec::new();
 
         for spec in &resolved.trackers {

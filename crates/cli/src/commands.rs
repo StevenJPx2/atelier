@@ -10,11 +10,12 @@ use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 use crate::clone;
 use crate::config::{self, repo_from_url};
 use crate::paths::Paths;
+use crate::plugins::Build;
 use crate::projects::{self, Entry};
 use crate::state;
 
 /// The checkout at `path`, and the project its `origin` names.
-fn here(path: &Path) -> Result<(Repository, Entry)> {
+pub fn here(path: &Path) -> Result<(Repository, Entry)> {
     let path = path
         .canonicalize()
         .wrap_err_with(|| format!("{} is not a folder", path.display()))?;
@@ -104,7 +105,10 @@ pub fn status(paths: &Paths) -> Result<()> {
         println!("{}  {}", entry.repo, local.path().display());
 
         if local.exists() {
-            match config::resolve(&entry, &local) {
+            let resolved = config::resolve(&entry, &local)
+                .and_then(|resolved| Build::new().checks(&resolved).map(|_| resolved));
+
+            match resolved {
                 Ok(resolved) => {
                     for (name, value, origin) in &resolved.shown {
                         println!("  {name:<11} {value:<24} {origin}");

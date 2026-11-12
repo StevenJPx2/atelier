@@ -1,8 +1,8 @@
 # Slice 2: run a project's gates
 
-**Status: In progress.** The checks role in core is built. Next come the
-`commands` plugin, running gates, the commit hook, GitHub's CI, and atelier
-checking itself.
+**Status: In progress.** The checks role in core and the `commands` plugin
+are built. Next come running gates, the commit hook, GitHub's CI, and
+atelier checking itself.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -221,10 +221,53 @@ cargo mutants --in-diff "$diff"
 '''
 ```
 
-Files: `plugins/commands/`.
+Files: [`plugins/commands/`](../../../plugins/commands/README.md).
 
-Verified by tests from settings to roots, gates and fixes, and its
-refusals: an unknown key, an empty `run`, a `root` that leaves the tree.
+#### Structure
+
+`Commands` registers as a checks plugin that runs only where a project
+names it. `Listed` is one project's gates, read from its `[commands]`
+table: each key a gate, in order of name. A gate's name takes letters,
+digits, `-` and `_`; its `root` is a folder inside the project, with no
+`.`, `..` or empty part; `run` must hold a command. Roots come once each,
+leaving out a folder with no files; a fix carries its gate's name.
+
+```rust
+pub struct Commands;
+
+impl Plugin for Commands {}
+
+pub struct Listed {
+    commands: Vec<Command>,
+}
+
+impl Listed {
+    pub fn from_settings(settings: &Settings) -> Result<Self, SettingsError>;
+}
+
+impl Checks for Listed {}
+```
+
+Core's `Settings` reads a list of text, for `setup`, and gives its keys in
+order.
+
+```rust
+impl Settings {
+    pub fn texts(&self, path: &str, key: &str) -> Result<Vec<&str>, SettingsError>;
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Setting)>;
+}
+```
+
+#### Verification
+
+Tests through the plugin's API, the registry and core's `gates`: each gate
+runs in its root with its setup and fix, a root with no files is left out,
+and `site` does not hold `sitemap.xml`; it runs only where a project names
+it, and a change under `docs` plans the two `docs` gates; each refusal names
+its path: a gate that is not a table, a name with a space, an unknown key, a
+missing or blank `run`, a mistyped `setup` or `fix`, and six roots that
+leave the project or are not plain folders. A doc test reads one gate.
+Mutation testing over the diff: 35 mutants, 27 caught, 8 unviable.
 
 ### Running gates (`crates/cli`)
 

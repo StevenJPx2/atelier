@@ -22,6 +22,7 @@ flowchart TD
 | `core`                | Issue machine and plugin contracts                | Built, slice 1 |
 | `command`             | Running a tool with a deadline and bounded output | Built, slice 1 |
 | `git`                 | Worktrees and branches behind core's contract     | Built, slice 1 |
+| `../plugins/commands` | Gates a project lists as commands                 | Built, slice 2 |
 | `../plugins/github`   | GitHub tracker and forge                          | Built, slice 1 |
 | `../plugins/opencode` | OpenCode sessions and permissions                 | Built, slice 1 |
 

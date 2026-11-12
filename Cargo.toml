@@ -5,6 +5,7 @@ members = [
   "crates/command",
   "crates/git",
   "crates/cli",
+  "plugins/commands",
   "plugins/github",
   "plugins/opencode",
 ]

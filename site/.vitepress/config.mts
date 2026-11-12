@@ -72,6 +72,7 @@ function sidebar(all: string[]): DefaultTheme.SidebarItem[] {
     section("Slices", "docs/plans/"),
     section("Crates", "crates/", crateName),
     section("Plugins", "plugins/", crateName),
+    section("Audits", "docs/audits/"),
     { text: "Repository", items: [...under("scripts/"), ...under("site/")].map((page) => item(page)) },
   ]
 }

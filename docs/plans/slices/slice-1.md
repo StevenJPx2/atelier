@@ -1,11 +1,10 @@
 # Slice 1: a label becomes a ready pull request
 
-**Status: In progress.** The core is built: the issue machine and its Kani
-proofs, the poll's events, `observe` and `act`, the roles and the registry.
-So are `crates/git`, the `github` plugin
-([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode`
+**Status: Implemented, `0.1.0-rc.5`.** The core, `crates/git`, the `github`
+plugin ([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode`
 plugin ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI
-and daemon. Then the end-to-end run.
+and daemon are built and released, and the [end-to-end runs](#end-to-end) on
+atelier and Chauffeur pass.
 
 You can label an issue `atelier:build` in a watched project and, within a
 poll, find a builder working on it in its own worktree. It opens a draft pull
@@ -32,6 +31,24 @@ sequenceDiagram
     D->>A: start a builder with the brief
     D->>T: comment the session and branch
 ```
+
+## Recording
+
+The Homebrew service, rc.3, claims a real issue: atelier
+[#16](https://github.com/StevenJPx2/atelier/issues/16) is labelled
+`atelier:build` in the left pane, and the right pane follows the daemon's
+log. Under launchd, git in `~/Documents` waits on macOS's folder prompt; once
+it is allowed, the next poll claims the issue and starts a builder. The left
+pane then shows the swapped labels, the comment naming the session and branch,
+and the worktree on its branch.
+
+The terminal-control capture is the real service and the real issue, with the
+wait for the prompt sped up 2400 times. The GIF is 1200 pixels wide, 47.8
+seconds and 966 KB; it links to the H.264 original, 1600 pixels wide and
+264 KB. Frames from its beginning, middle and end are inspected for private
+data.
+
+[![A labelled issue is claimed: labels swapped, the builder's session and branch commented, its worktree on the issue's branch](../../media/slice-1.gif)](../../media/slice-1.mp4)
 
 ## What it builds
 
@@ -926,6 +943,25 @@ another repository and a second add.
 
 ## End to end
 
-Planned, after the CLI: the Chauffeur run and a small atelier issue, each
-labelled with the owner's approval, as
+Each run is a real issue on GitHub, labelled with the owner's approval, and
+followed by the Homebrew service, as
 [the plan](https://github.com/StevenJPx2/atelier/issues/1#end-to-end) lists.
+
+| Run                                                                                                                             | What happens                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [atelier#16](https://github.com/StevenJPx2/atelier/issues/16) → [#17](https://github.com/StevenJPx2/atelier/pull/17)            | Claimed within a poll. The builder's pull request fails mutation testing; the failure reaches it through sourcefed, it fixes the cause, and the next push passes. The merge closes the issue and removes the worktree.                                                                                            |
+| [atelier#19](https://github.com/StevenJPx2/atelier/issues/19)                                                                   | Removing `atelier:working` mid-turn stops the builder within a poll: its turn is aborted and nothing is pushed.                                                                                                                                                                                                   |
+| [atelier#20](https://github.com/StevenJPx2/atelier/issues/20) → [#21](https://github.com/StevenJPx2/atelier/pull/21)            | Five red rounds block the issue: `atelier:blocked` replaces `atelier:working`, atelier comments why, and the builder stands down.                                                                                                                                                                                 |
+| [chauffeur#6](https://github.com/StevenJPx2/chauffeur/issues/6) → [chauffeur#8](https://github.com/StevenJPx2/chauffeur/pull/8) | Chauffeur's whole config is `base = "v2"`: the worktree starts from `origin/v2` and the pull request goes into `v2`. The site build and every check pass; atelier tells the builder, which marks it ready 18 seconds later. The merge into `v2`, not the default branch, still closes the issue, through atelier. |
+
+The runs shape two parts of the design: sourcefed suppresses passing checks, so
+atelier tells the builder when every check passed
+([#18](https://github.com/StevenJPx2/atelier/pull/18)); and a pull request's
+events still wake an interrupted builder, so atelier tells it to stand down
+([#22](https://github.com/StevenJPx2/atelier/pull/22)).
+
+Under launchd, git in a checkout in `~/Documents` waits on macOS's folder
+prompt, which a new release can bring back; the daemon logs
+`git ran past 120s` until it is allowed. atelier's own clones outside
+`~/Documents` are planned in
+[#1](https://github.com/StevenJPx2/atelier/issues/1#ateliers-own-clones).

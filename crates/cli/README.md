@@ -50,7 +50,7 @@ flowchart LR
 | `commands.rs`      | `init`, `add` and `status`                                           |
 | `gates.rs`         | `gates`, `check` and `fix`, in a checkout                            |
 | `hook.rs`          | The pre-commit hook builders' worktrees use                          |
-| `clone.rs`         | atelier's own bare clone of each project, made when missing          |
+| `clone.rs`         | atelier's own bare clone of each project, made or finished when used |
 | `paths.rs`         | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
 | `projects.rs`      | `projects.toml`: your projects and your own filters                  |
 | `config.rs`        | `.atelier/config.toml` from `origin`, what is found, what is set     |

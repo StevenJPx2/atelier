@@ -40,7 +40,11 @@ pub fn checked(dir: &Path, args: &[&str]) -> Result<String, PluginError> {
         return Ok(output.stdout);
     }
 
-    let message = format!("git {}: {}", args.join(" "), output.stderr.trim());
+    let said = match output.stderr.trim() {
+        "" => "failed, saying nothing",
+        said => said,
+    };
+    let message = format!("git {}: {said}", args.join(" "));
     let remote = args
         .first()
         .is_some_and(|command| ["fetch", "ls-remote"].contains(command));
@@ -60,8 +64,13 @@ mod tests {
     fn a_failed_command_is_permanent_unless_it_reaches_the_remote() {
         let local = checked(Path::new("."), &["rev-parse", "--verify", "no-such-ref"]);
         let remote = checked(Path::new("."), &["ls-remote", "/no/such/remote"]);
+        let silent = checked(Path::new("."), &["config", "--get", "atelier.no-such-key"]);
 
         assert!(local.unwrap_err().is_permanent());
         assert!(!remote.unwrap_err().is_permanent());
+        assert_eq!(
+            silent.unwrap_err().message,
+            "git config --get atelier.no-such-key: failed, saying nothing"
+        );
     }
 }

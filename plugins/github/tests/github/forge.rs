@@ -1,4 +1,4 @@
-use atelier_core::{Checks, Forge, Plugin, PullRequest, Registry, Repo, Settings, Tracker};
+use atelier_core::{Forge, Plugin, PullRequest, Registry, Repo, Rollup, Settings, Tracker};
 
 use crate::stand_in::Reply::Captured;
 use crate::stand_in::StandIn;
@@ -35,13 +35,13 @@ fn a_pull_request_reads_its_state_drafts_and_failed_rounds() {
                 number: 8,
                 draft: true,
                 failed_rounds: 1,
-                checks: Checks::Passed
+                checks: Rollup::Passed
             }),
             Some(PullRequest::Open {
                 number: 12,
                 draft: false,
                 failed_rounds: 0,
-                checks: Checks::Passed
+                checks: Rollup::Passed
             }),
             None,
         ]

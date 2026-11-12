@@ -49,9 +49,9 @@ impl FromIterator<Mark> for Marks {
     }
 }
 
-/// The checks on a pull request's head commit.
+/// The combined state of the checks on a pull request's head commit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Checks {
+pub enum Rollup {
     Pending,
     Passed,
     Failed,
@@ -65,7 +65,7 @@ pub enum PullRequest {
         number: u64,
         draft: bool,
         failed_rounds: u8,
-        checks: Checks,
+        checks: Rollup,
     },
     Merged {
         number: u64,
@@ -105,7 +105,7 @@ pub struct Seen {
 /// first. Claiming has none: the worker finishes a claim from its own record.
 ///
 /// ```
-/// use atelier_core::{Checks, Event, Mark, Marks, Phase, PullRequest, Seen, events};
+/// use atelier_core::{Rollup, Event, Mark, Marks, Phase, PullRequest, Seen, events};
 ///
 /// let seen = Seen {
 ///     open: true,
@@ -114,7 +114,7 @@ pub struct Seen {
 ///         number: 31,
 ///         draft: true,
 ///         failed_rounds: 2,
-///         checks: Checks::Failed,
+///         checks: Rollup::Failed,
 ///     }),
 ///     stage: None,
 /// };
@@ -172,7 +172,7 @@ fn progress(phase: Phase, seen: &Seen) -> Option<Event> {
         (Phase::Open { rounds }, Some((_, failed, checks))) => {
             if failed > rounds {
                 Some(Event::RoundFailed)
-            } else if checks == Checks::Passed {
+            } else if checks == Rollup::Passed {
                 Some(Event::AllPassed)
             } else {
                 None
@@ -181,7 +181,7 @@ fn progress(phase: Phase, seen: &Seen) -> Option<Event> {
         (
             Phase::Stage { rounds, .. } | Phase::Green { rounds } | Phase::Ready { rounds },
             Some((_, failed, checks)),
-        ) if checks == Checks::Pending || failed > rounds => Some(Event::Pushed),
+        ) if checks == Rollup::Pending || failed > rounds => Some(Event::Pushed),
         (Phase::Stage { .. }, Some(_)) => match seen.stage {
             Some(StageOutcome::Passed) => Some(Event::StagePassed),
             Some(StageOutcome::Failed { rounds }) => Some(Event::StageFailed { rounds }),
@@ -205,7 +205,7 @@ mod tests {
         }
     }
 
-    const fn open(failed_rounds: u8, checks: Checks, draft: bool) -> PullRequest {
+    const fn open(failed_rounds: u8, checks: Rollup, draft: bool) -> PullRequest {
         PullRequest::Open {
             number: 1,
             draft,
@@ -239,7 +239,7 @@ mod tests {
             ),
             (
                 Phase::Building,
-                seen(working, Some(open(0, Checks::Pending, true))),
+                seen(working, Some(open(0, Rollup::Pending, true))),
                 vec![Event::PullRequestOpened],
             ),
         ];
@@ -265,37 +265,37 @@ mod tests {
             ),
             (
                 ready,
-                seen(working, Some(open(1, Checks::Passed, false))),
+                seen(working, Some(open(1, Rollup::Passed, false))),
                 vec![],
             ),
             (
                 ready,
-                seen(working, Some(open(2, Checks::Failed, false))),
+                seen(working, Some(open(2, Rollup::Failed, false))),
                 vec![Event::Pushed],
             ),
             (
                 ready,
-                seen(working, Some(open(0, Checks::Failed, false))),
+                seen(working, Some(open(0, Rollup::Failed, false))),
                 vec![],
             ),
             (
                 Phase::Open { rounds: 1 },
-                seen(working, Some(open(1, Checks::Failed, true))),
+                seen(working, Some(open(1, Rollup::Failed, true))),
                 vec![],
             ),
             (
                 Phase::Open { rounds: 1 },
-                seen(working, Some(open(1, Checks::Passed, true))),
+                seen(working, Some(open(1, Rollup::Passed, true))),
                 vec![Event::AllPassed],
             ),
             (
                 Phase::Green { rounds: 0 },
-                seen(working, Some(open(0, Checks::Passed, true))),
+                seen(working, Some(open(0, Rollup::Passed, true))),
                 vec![],
             ),
             (
                 Phase::Green { rounds: 0 },
-                seen(working, Some(open(0, Checks::Passed, false))),
+                seen(working, Some(open(0, Rollup::Passed, false))),
                 vec![Event::MarkedReady],
             ),
         ];
@@ -312,7 +312,7 @@ mod tests {
             rounds: 0,
         };
         let working = Marks::default().with(Mark::Working);
-        let pull = Some(open(0, Checks::Passed, true));
+        let pull = Some(open(0, Rollup::Passed, true));
 
         let cases = [
             (None, pull, vec![]),
@@ -324,7 +324,7 @@ mod tests {
             ),
             (
                 Some(StageOutcome::Passed),
-                Some(open(0, Checks::Pending, true)),
+                Some(open(0, Rollup::Pending, true)),
                 vec![Event::Pushed],
             ),
         ];

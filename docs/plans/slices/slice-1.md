@@ -1,6 +1,6 @@
 # Slice 1: a label becomes a ready pull request
 
-**Status: Implemented, `0.1.0-rc.5`.** The core, `crates/git`, the `github`
+**Status: Implemented, `0.1.0-rc.6`.** The core, `crates/git`, the `github`
 plugin ([#6](https://github.com/StevenJPx2/atelier/issues/6)), the `opencode`
 plugin ([#7](https://github.com/StevenJPx2/atelier/issues/7)), and the CLI
 and daemon are built and released, and the [end-to-end runs](#end-to-end) on

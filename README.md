@@ -1,6 +1,6 @@
 # atelier
 
-**Status: slice 1 implemented, `0.1.0-rc.5`.** Install with
+**Status: slice 1 implemented, `0.1.0-rc.6`.** Install with
 `brew install StevenJPx2/taps/atelier`, then `atelier init`, `atelier add` and
 `brew services start atelier`: a labelled issue becomes a builder and a ready
 pull request. Gates, language plugins, the critic and recordings are the

@@ -1,6 +1,8 @@
 //! GitHub pull requests as atelier's forge.
 
-use atelier_core::{Forge, PluginError, PullRequest, Repo, Rollup};
+use atelier_core::{CiFile, Forge, PluginError, PullRequest, Repo, Rollup};
+
+use crate::ci;
 use serde::Deserialize;
 
 use crate::GitHub;
@@ -154,6 +156,10 @@ impl Forge for GitHub {
 
     fn denied(&self) -> Vec<String> {
         vec!["gh pr merge *".into(), "gh release *".into()]
+    }
+
+    fn ci(&self, release: &str, commit: &str, base: &str) -> Vec<CiFile> {
+        vec![ci::workflow(release, commit, base)]
     }
 }
 

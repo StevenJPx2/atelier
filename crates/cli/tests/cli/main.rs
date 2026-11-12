@@ -266,6 +266,7 @@ fn init_makes_the_labels_the_project_sets() {
     let init = sandbox.atelier(&["init", "--path", &sandbox.checkout.to_string_lossy()]);
 
     let stdout = String::from_utf8(init.stdout).unwrap();
+    let stderr = String::from_utf8(init.stderr.clone()).unwrap();
     let made: Vec<String> = sandbox
         .gh_calls()
         .iter()
@@ -290,6 +291,11 @@ fn init_makes_the_labels_the_project_sets() {
         stdout.contains("labels atelier:build, bot:working"),
         "{stdout}"
     );
+    assert!(
+        stderr.contains("no release build, so it writes no CI"),
+        "{stderr}"
+    );
+    assert!(!sandbox.checkout.join(".github").exists());
 }
 
 #[test]

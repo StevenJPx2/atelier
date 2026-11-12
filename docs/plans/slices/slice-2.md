@@ -1,8 +1,8 @@
 # Slice 2: run a project's gates
 
 **Status: In progress.** The checks role in core, the `commands` plugin,
-`atelier gates`, `check` and `fix`, and the commit hook are built. Next
-come GitHub's CI and atelier checking itself.
+`atelier gates`, `check` and `fix`, the commit hook and GitHub's CI are
+built. Next comes atelier checking itself.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -458,7 +458,10 @@ the running release was built from:
 
 ```yaml
 # .github/workflows/atelier.yml
-on: [pull_request, push]
+on:
+  pull_request:
+  push:
+    branches: [main]
 jobs:
   gates:
     uses: StevenJPx2/atelier/.github/workflows/gates.yml@<commit>
@@ -476,8 +479,40 @@ from the calling repository instead, as atelier's own CI does.
 
 Files: `plugins/github/src/ci.rs`, `.github/workflows/gates.yml`.
 
-Verified by tests of the workflow `init` writes, by `actionlint` on both
-workflows, and on atelier's own pull requests.
+#### Structure
+
+A forge names the files its CI needs to run a project's gates with one
+release, on pull requests and on pushes to the base. A release build stamps
+its commit through `ATELIER_COMMIT`, which `release.yml` sets; `init`
+writes the forge's files only from a release build, and says why when it
+writes none.
+
+```rust
+pub struct CiFile {
+    pub path: String,
+    pub text: String,
+}
+
+pub trait Forge {
+    fn ci(&self, release: &str, commit: &str, base: &str) -> Vec<CiFile>;
+    …
+}
+```
+
+`gates.yml` has two jobs. `plan` installs atelier once, from the release
+with its `SHA256SUMS` checked or built from source, passes it on as an
+artifact, and writes the matrix. `gate` runs once per entry, without
+stopping the others on a failure; it is skipped when the matrix is empty.
+Both check out the full history, with credentials, since atelier fetches
+the base branch to read the config.
+
+#### Verification
+
+The github plugin's workflow names the base, the pinned commit and the
+release; `init` from a build with no release commit writes no CI and says
+so; `write_ci` writes each file in its folder. `actionlint` passes on
+`gates.yml`, on `release.yml` and on a written `atelier.yml`. The
+workflow runs for real on atelier's own pull requests and in the end to end.
 
 ### atelier checks itself (`.atelier/config.toml`)
 

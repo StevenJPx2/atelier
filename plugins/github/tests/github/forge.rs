@@ -91,3 +91,22 @@ fn the_plugin_registers_both_roles_under_the_name_its_issues_carry() {
     assert!(registry.find_forge(github.name()).is_ok());
     assert!(registry.find_tracker("").is_err());
 }
+#[test]
+fn its_ci_calls_atelier_s_gates_pinned_to_the_release_commit() {
+    let gh = StandIn::new(&[]);
+
+    let files = gh.github().ci("0.1.0-rc.7", "c3e906af5f90", "v2");
+
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].path, ".github/workflows/atelier.yml");
+    let text = &files[0].text;
+    assert!(text.contains("    branches: [v2]\n"), "{text}");
+    assert!(
+        text.contains(
+            "    uses: StevenJPx2/atelier/.github/workflows/gates.yml@c3e906af5f90 # v0.1.0-rc.7\n"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("      atelier: 0.1.0-rc.7\n"), "{text}");
+    assert_eq!(gh.calls(), Vec::<Vec<String>>::new());
+}

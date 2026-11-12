@@ -33,6 +33,15 @@ impl Build {
         }
     }
 
+    /// The forge plugin named `name`.
+    ///
+    /// # Errors
+    ///
+    /// The build has no forge by that name.
+    pub fn forge(&self, name: &str) -> Result<&dyn Forge> {
+        Ok(self.registry().find_forge(name)?)
+    }
+
     fn registry(&self) -> Registry<'_> {
         let list: [&dyn Plugin; 3] = [&self.commands, &self.github, &self.opencode];
         Registry::new(&list)

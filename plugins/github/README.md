@@ -19,6 +19,8 @@ flowchart LR
 | `tracker.rs` | `GitHubTracker`: listing with ETags and pages, search, marking, comments |
 | `labels.rs`  | `Labels`: each mark's label, from the project's settings                 |
 | `forge.rs`   | One GraphQL query: the pull request and each commit's checks             |
+| `ci.rs`      | `.github/workflows/atelier.yml`, calling atelier's reusable `gates.yml`  |
+| `clone.rs`   | The URL to clone a repository from, over the protocol `gh` uses          |
 
 ```rust
 let github = GitHub::new();

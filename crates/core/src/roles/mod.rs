@@ -6,4 +6,4 @@ mod traits;
 
 pub use error::{Failure, PluginError};
 pub use issue::{Filter, Issue, IssueKey, Listing, Repo, Session};
-pub use traits::{Agent, Forge, Tracker, WorktreeRequest, Worktrees};
+pub use traits::{Agent, CiFile, Forge, Tracker, WorktreeRequest, Worktrees};

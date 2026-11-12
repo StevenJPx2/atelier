@@ -265,7 +265,12 @@ pub trait Forge {
 }
 
 pub trait Agent {
-    fn start(&self, worktree: &Path, brief: &Brief) -> Result<Session, PluginError>;
+    fn start(
+        &self,
+        worktree: &Path,
+        brief: &Brief,
+        replacing: Option<&Session>,
+    ) -> Result<Session, PluginError>;
     fn interrupt(&self, session: &Session) -> Result<(), PluginError>;
     fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError>;
 }
@@ -778,7 +783,11 @@ opencode.interrupt(&session)?;
 
 `OpenCode` runs `opencode` from `PATH`, which talks to its running server,
 or another program in tests. It registers as the agent `opencode`. `start`
-deletes a session whose prompt fails. Interrupting or telling a session that
+first lists the worktree's sessions (`get /api/session?directory=`) and
+continues the one with the brief's title, other than the issue's last
+builder, sending the brief only when it has no messages: a daemon stopped in
+the middle of a start leaves one builder. Otherwise it makes the session,
+and deletes one whose prompt fails. Interrupting or telling a session that
 is gone (404) succeeds, since no builder is left to stop or tell. Each call
 has a 30-second deadline; any other 4xx is permanent, anything else
 transient.
@@ -817,9 +826,12 @@ pub fn rules(brief: &Brief) -> Vec<Rule>;
 #### Verification
 
 A stand-in `opencode` replays what OpenCode v2.2.7 printed: a builder starts
-as a session in its worktree with its rules, then gets its brief; a session
-whose prompt fails is deleted; telling or interrupting a session succeeds,
-and so does one that is gone; a reply that is not a session is refused; it is
+as a session in its worktree with its rules, then gets its brief; a builder
+already briefed in its worktree is continued, one made but never briefed gets
+its brief, and neither the builder a start replaces nor a session titled for
+another issue is continued; a session whose prompt fails is deleted; telling
+or interrupting a session succeeds, and so does one that is gone; a reply
+that is not a session, or a session list that is not one, is refused; it is
 the build's agent under its name.
 
 Once against the real OpenCode, on demand, since it starts a model turn: a

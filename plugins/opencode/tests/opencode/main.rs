@@ -153,17 +153,26 @@ const CREATED: &str = "ses_e34e74974ffezeihakyxaDRnbK";
 #[test]
 fn a_builder_starts_as_a_session_in_its_worktree_with_its_rules_then_its_brief() {
     let oc = StandIn::new(&[
+        Reply::Ok("session-list-empty.json"),
         Reply::Ok("session-created.json"),
         Reply::Ok("interrupted-idle.json"),
     ]);
     let brief = brief();
     let worktree = Path::new("/worktrees/StevenJPx2/chauffeur/issue-12");
 
-    let session = oc.opencode().start(worktree, &brief).unwrap();
+    let session = oc.opencode().start(worktree, &brief, None).unwrap();
 
     let calls = oc.calls();
-    let created = body(&calls[0]);
-    assert_eq!(calls[0][..3], ["api", "post", "/api/session"]);
+    let created = body(&calls[1]);
+    assert_eq!(
+        calls[0],
+        [
+            "api",
+            "get",
+            "/api/session?directory=/worktrees/StevenJPx2/chauffeur/issue-12"
+        ]
+    );
+    assert_eq!(calls[1][..3], ["api", "post", "/api/session"]);
     assert_eq!(created["title"], "#12 Fix the dead link");
     assert_eq!(created["location"]["directory"], worktree.to_str().unwrap());
     assert_eq!(
@@ -186,10 +195,10 @@ fn a_builder_starts_as_a_session_in_its_worktree_with_its_rules_then_its_brief()
         assert!(permissions.contains(&rule), "{rule}");
     }
     assert_eq!(
-        calls[1][..3],
+        calls[2][..3],
         ["api", "post", &format!("/api/session/{CREATED}/prompt")]
     );
-    assert_eq!(body(&calls[1])["text"], brief.text());
+    assert_eq!(body(&calls[2])["text"], brief.text());
     assert_eq!(
         session,
         Session {
@@ -199,20 +208,122 @@ fn a_builder_starts_as_a_session_in_its_worktree_with_its_rules_then_its_brief()
     );
 }
 
+/// The session in `session-list-one.json`.
+const LISTED: &str = "ses_e2f334afbffeadMMO0ejknRlGJ";
+
+#[test]
+fn a_builder_already_briefed_in_its_worktree_is_continued_not_started_again() {
+    let oc = StandIn::new(&[
+        Reply::Ok("session-list-one.json"),
+        Reply::Ok("messages-prompted.json"),
+    ]);
+    let brief = brief();
+
+    let session = oc
+        .opencode()
+        .start(Path::new("/work trees/issue-12"), &brief, None)
+        .unwrap();
+
+    let calls = oc.calls();
+    assert_eq!(
+        calls[0],
+        [
+            "api",
+            "get",
+            "/api/session?directory=/work%20trees/issue-12"
+        ]
+    );
+    assert_eq!(
+        calls[1],
+        ["api", "get", &format!("/api/session/{LISTED}/message")]
+    );
+    assert_eq!(calls.len(), 2);
+    assert_eq!(
+        session,
+        Session {
+            id: LISTED.into(),
+            title: brief.title
+        }
+    );
+}
+
+#[test]
+fn a_builder_made_but_never_briefed_gets_its_brief() {
+    let oc = StandIn::new(&[
+        Reply::Ok("session-list-one.json"),
+        Reply::Ok("messages-empty.json"),
+        Reply::Ok("prompt-accepted.json"),
+    ]);
+    let brief = brief();
+
+    let session = oc.opencode().start(Path::new("/w"), &brief, None).unwrap();
+
+    let calls = oc.calls();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[2][..3],
+        ["api", "post", &format!("/api/session/{LISTED}/prompt")]
+    );
+    assert_eq!(body(&calls[2])["text"], brief.text());
+    assert_eq!(session.id, LISTED);
+}
+
+#[test]
+fn the_builder_a_start_replaces_is_never_continued() {
+    let oc = StandIn::new(&[
+        Reply::Ok("session-list-one.json"),
+        Reply::Ok("session-created.json"),
+        Reply::Ok("prompt-accepted.json"),
+    ]);
+    let brief = brief();
+    let stopped = Session {
+        id: LISTED.into(),
+        title: brief.title.clone(),
+    };
+
+    let session = oc
+        .opencode()
+        .start(Path::new("/w"), &brief, Some(&stopped))
+        .unwrap();
+
+    assert_eq!(oc.calls()[1][..3], ["api", "post", "/api/session"]);
+    assert_eq!(session.id, CREATED);
+}
+
+#[test]
+fn a_session_titled_for_another_issue_is_not_continued() {
+    let oc = StandIn::new(&[
+        Reply::Ok("session-list-one.json"),
+        Reply::Ok("session-created.json"),
+        Reply::Ok("prompt-accepted.json"),
+    ]);
+    let mut brief = brief();
+    brief.title = "#13 Another issue".into();
+
+    let session = oc.opencode().start(Path::new("/w"), &brief, None).unwrap();
+
+    assert_eq!(oc.calls()[1][..3], ["api", "post", "/api/session"]);
+    assert_eq!(session.id, CREATED);
+}
+
 #[test]
 fn a_session_whose_prompt_fails_is_deleted() {
     let oc = StandIn::new(&[
+        Reply::Ok("session-list-empty.json"),
         Reply::Ok("session-created.json"),
         Reply::Unreachable,
         Reply::Ok("interrupted-idle.json"),
     ]);
 
-    let error = oc.opencode().start(Path::new("/w"), &brief()).unwrap_err();
+    let error = oc
+        .opencode()
+        .start(Path::new("/w"), &brief(), None)
+        .unwrap_err();
 
     let calls = oc.calls();
     assert_eq!(error.failure, Failure::Transient);
     assert_eq!(
-        calls[2],
+        calls[3],
         ["api", "delete", &format!("/api/session/{CREATED}")]
     );
 }
@@ -283,9 +394,28 @@ fn telling_prompts_the_session_and_succeeds_on_one_that_is_gone() {
 
 #[test]
 fn a_reply_that_is_not_a_session_is_refused() {
+    let oc = StandIn::new(&[
+        Reply::Ok("session-list-empty.json"),
+        Reply::Ok("interrupted-idle.json"),
+    ]);
+
+    let error = oc
+        .opencode()
+        .start(Path::new("/w"), &brief(), None)
+        .unwrap_err();
+
+    assert!(error.is_permanent());
+    assert_eq!(oc.calls().len(), 2);
+}
+
+#[test]
+fn a_session_list_that_is_not_one_is_refused() {
     let oc = StandIn::new(&[Reply::Ok("interrupted-idle.json")]);
 
-    let error = oc.opencode().start(Path::new("/w"), &brief()).unwrap_err();
+    let error = oc
+        .opencode()
+        .start(Path::new("/w"), &brief(), None)
+        .unwrap_err();
 
     assert!(error.is_permanent());
     assert_eq!(oc.calls().len(), 1);

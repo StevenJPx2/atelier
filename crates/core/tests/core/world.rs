@@ -206,7 +206,7 @@ impl Forge for World {
 }
 
 impl Agent for World {
-    fn start(&self, _: &Path, brief: &Brief) -> Result<Session, PluginError> {
+    fn start(&self, _: &Path, brief: &Brief, _: Option<&Session>) -> Result<Session, PluginError> {
         self.change()?;
         let mut sessions = self.sessions.borrow_mut();
         let session = Session {

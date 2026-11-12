@@ -38,6 +38,9 @@ opencode.interrupt(&session)?;
   its own branch allowed; the brief's denied commands after that, so they win;
   the question tool denied, so it writes on the pull request instead of
   waiting. The last matching rule wins.
+- **Starting again** continues the worktree's session with the brief's
+  title, other than the issue's last builder, and briefs it only if it never
+  was: a daemon stopped in the middle of a start leaves one builder.
 - **A failed prompt** deletes the session, so no idle builder is left.
 - **Telling** prompts the session, and an idle one starts a turn: atelier
   wakes the builder this way when every check passed.

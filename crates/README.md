@@ -29,7 +29,7 @@ Language plugins enter the workspace with their own slices.
 
 ```sh
 cargo run --locked -p atelier-cli -- --version
-# atelier 0.1.0-rc.2
+# atelier 0.1.0-rc.3
 ```
 
 ## Rules

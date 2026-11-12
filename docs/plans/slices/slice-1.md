@@ -601,7 +601,9 @@ let output = atelier_command::run(command, Duration::from_secs(10))?;
 
 A command runs with no input in its own process group. On its deadline the
 whole group is killed, so a child it started cannot hold the output open, and
-the failure is transient. At most 1 MiB of each output is kept.
+the failure is transient. Each output is read to its end, so a tool that
+prints a lot runs on, and its last 1 MiB is kept, with bytes that are not
+UTF-8 replaced.
 
 ```rust
 pub struct Output {

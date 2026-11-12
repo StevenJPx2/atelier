@@ -1,6 +1,8 @@
 # Slice 2: run a project's gates
 
-**Status: Planned.** Waits on the owner's approval of this page.
+**Status: In progress.** The checks role in core is built. Next come the
+`commands` plugin, running gates, the commit hook, GitHub's CI, and atelier
+checking itself.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -56,9 +58,11 @@ Files: `crates/core/src/checks/`.
 
 ```rust
 let tree = MemoryTree::new([("Cargo.toml", "…"), ("docs/README.md", "…")]);
+let changed = ["docs/README.md".to_owned()];
 
-let planned = plan(&plugins, &tree, &overrides, Some(&["docs/README.md"]));
-// → [Planned { gate: "commands/prettier", root: "docs" }]
+let planned = gates(&[("commands", &commands)], &tree, &overrides, Some(&changed));
+// → one gate, commands/prettier in docs:
+//   [Planned { plugin: "commands", root: Root("docs"), item: Gate { … } }]
 ```
 
 ```toml
@@ -70,10 +74,134 @@ checks = []                     # nothing under vendor/ is checked
 skip = ["commands/mutants"]     # generated code
 ```
 
-Verified by unit tests over in-memory trees: a file belongs to the deepest
-root; a root the diff leaves alone is not planned; with no diff, every root
-is; `checks = []` empties a subtree; `skip` drops a gate there; the deepest
-override wins. Mutation testing over the role.
+#### Structure
+
+A plugin reads the tree and returns plain data. A root is a directory from
+the top, `.` or a path without a trailing `/`. Each gate and fix is a
+shell command run in its root; a fix shares its gate's name.
+
+```rust
+pub trait Tree {
+    fn files(&self) -> Vec<String>;
+    fn read(&self, path: &str) -> Option<String>;
+}
+
+pub struct MemoryTree(BTreeMap<String, String>);
+
+impl MemoryTree {
+    pub fn new<'a>(files: impl IntoIterator<Item = (&'a str, &'a str)>) -> Self;
+}
+
+impl Tree for MemoryTree {}
+
+pub struct Root(pub String);
+
+pub struct Gate {
+    pub name: String,
+    pub setup: Vec<String>,
+    pub run: String,
+}
+
+pub struct Fix {
+    pub name: String,
+    pub run: String,
+}
+
+pub trait Checks {
+    fn roots(&self, tree: &dyn Tree) -> Vec<Root>;
+    fn gates(&self, tree: &dyn Tree, root: &Root) -> Vec<Gate>;
+    fn fixes(&self, tree: &dyn Tree, root: &Root) -> Vec<Fix>;
+}
+```
+
+`gates` plans every root with no diff; with one, each changed file touches
+the deepest roots that hold it, counting only plugins that run at that file.
+An override's `checks` keeps only the plugins it names in its subtree, and
+its `skip` drops gates and fixes by full name there. The deepest override
+holding a path is the one that applies. Results come in order of root, then
+plugin, then each plugin's own order.
+
+```rust
+pub struct Override {
+    pub checks: Option<Vec<String>>,
+    pub skip: Vec<String>,
+}
+
+pub struct Overrides(pub BTreeMap<String, Override>);
+
+pub struct Planned<T> {
+    pub plugin: String,
+    pub root: Root,
+    pub item: T,
+}
+
+impl Planned<Gate> {
+    pub fn name(&self) -> String;
+}
+
+impl Planned<Fix> {
+    pub fn name(&self) -> String;
+}
+
+pub fn gates(
+    plugins: &[(&str, &dyn Checks)],
+    tree: &dyn Tree,
+    overrides: &Overrides,
+    changed: Option<&[String]>,
+) -> Vec<Planned<Gate>>;
+
+pub fn fixes(
+    plugins: &[(&str, &dyn Checks)],
+    tree: &dyn Tree,
+    overrides: &Overrides,
+    files: &[String],
+) -> Vec<Planned<Fix>>;
+```
+
+A checks plugin registers how to build itself from a project's settings,
+and where it runs: in every project, as a language plugin does, or only
+where the project names it. `find_checks` returns the found plugins, then
+the named ones in the project's order, refusing a name the build lacks.
+
+```rust
+pub enum On { Found, Named }
+
+impl<'a> MakeChecks<'a> {
+    pub const fn on(&self) -> On;
+    pub fn make(
+        &self,
+        settings: &Settings,
+    ) -> Result<Box<dyn Checks + 'a>, SettingsError>;
+}
+
+impl<'a> Registry<'a> {
+    pub fn checks(
+        &mut self,
+        on: On,
+        build: impl Fn(&Settings) -> Result<Box<dyn Checks + 'a>, SettingsError>
+            + 'a,
+    );
+    pub fn find_checks(
+        &self,
+        named: &[String],
+    ) -> Result<Vec<(&'static str, &MakeChecks<'a>)>, MissingPlugin>;
+}
+```
+
+The pull request's check state, the enum `Rollup` (`Pending`, `Passed`,
+`Failed`), takes GitHub's name, leaving `Checks` to the role.
+
+#### Verification
+
+Tests through core's API with plugins whose roots and gates are fixed: a
+file touches the deepest roots that hold it, and `docsite/` is not inside
+`docs`; with no diff every root runs, in order; an empty diff runs nothing;
+`checks = []` empties a subtree, even for a root above it; `checks` keeps
+the plugins it names; `skip` drops a gate and the deepest override wins;
+fixes follow the files and the overrides; found plugins always run, named
+ones only when named, and an unknown name is refused. A doc test plans one
+root of two. Mutation testing over the diff: 25 mutants, 19 caught, 6
+unviable.
 
 ### The `commands` plugin (`plugins/commands`)
 
@@ -85,7 +213,11 @@ testing can test only the diff:
 
 ```toml
 [commands.mutants]
-run = '[ -z "$ATELIER_BASE" ] || cargo mutants --in-diff <(git diff "$ATELIER_BASE")'
+run = '''
+[ -z "$ATELIER_BASE" ] && exit 0
+diff=$(mktemp) && git diff "$ATELIER_BASE" > "$diff"
+cargo mutants --in-diff "$diff"
+'''
 ```
 
 Files: `plugins/commands/`.

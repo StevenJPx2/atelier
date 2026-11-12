@@ -1,7 +1,9 @@
-//! atelier's core: the issue machine and the roles plugins fill. It does no
-//! I/O, has no dependencies, and knows no language, tracker, forge or agent.
+//! atelier's core: the issue machine, the roles plugins fill, and which
+//! gates a change needs. It does no I/O, has no dependencies, and knows no
+//! language, tracker, forge or agent.
 
 mod brief;
+mod checks;
 mod machine;
 mod plugin;
 mod poll;
@@ -10,8 +12,11 @@ mod seen;
 mod settings;
 
 pub use brief::Brief;
+pub use checks::{
+    Checks, Fix, Gate, MemoryTree, Override, Overrides, Planned, Root, Tree, fixes, gates,
+};
 pub use machine::{Action, Event, Mark, Phase, Pipeline, PipelineError, Reason, step};
-pub use plugin::{MakeTracker, MissingPlugin, Plugin, Registry, Role};
+pub use plugin::{MakeChecks, MakeTracker, MissingPlugin, On, Plugin, Registry, Role};
 pub use poll::{
     Observation, Observed, Plugins, Project, Record, Report, Source, State, Step, act, observe,
 };

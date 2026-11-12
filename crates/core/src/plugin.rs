@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{Agent, Forge, Settings, SettingsError, Tracker};
+use crate::{Agent, Checks, Forge, Settings, SettingsError, Tracker};
 
 /// A crate atelier is built with. Its `register` adds the roles it fills.
 pub trait Plugin {
@@ -17,6 +17,17 @@ pub enum Role {
     Tracker,
     Forge,
     Agent,
+    Checks,
+}
+
+/// Where a checks plugin runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum On {
+    /// In every project, finding its roots itself, as a language plugin
+    /// does.
+    Found,
+    /// Only in a project that names it in `checks`.
+    Named,
 }
 
 /// What a tracker plugin registers: its tracker for one project, built
@@ -35,10 +46,34 @@ impl<'a> MakeTracker<'a> {
     }
 }
 
+type BuildChecks<'a> = dyn Fn(&Settings) -> Result<Box<dyn Checks + 'a>, SettingsError> + 'a;
+
+/// Builds a checks plugin for one project, from that project's settings
+/// for it.
+pub struct MakeChecks<'a> {
+    on: On,
+    build: Box<BuildChecks<'a>>,
+}
+
+impl<'a> MakeChecks<'a> {
+    #[must_use]
+    pub const fn on(&self) -> On {
+        self.on
+    }
+
+    /// # Errors
+    ///
+    /// A setting the plugin cannot use.
+    pub fn make(&self, settings: &Settings) -> Result<Box<dyn Checks + 'a>, SettingsError> {
+        (self.build)(settings)
+    }
+}
+
 /// Every role the build's plugins fill, by plugin name.
 pub struct Registry<'a> {
     naming: &'static str,
     trackers: Vec<(&'static str, MakeTracker<'a>)>,
+    checks: Vec<(&'static str, MakeChecks<'a>)>,
     forges: Vec<(&'static str, &'a dyn Forge)>,
     agents: Vec<(&'static str, &'a dyn Agent)>,
 }
@@ -58,6 +93,7 @@ impl<'a> Registry<'a> {
         let mut registry = Self {
             naming: "",
             trackers: Vec::new(),
+            checks: Vec::new(),
             forges: Vec::new(),
             agents: Vec::new(),
         };
@@ -77,6 +113,20 @@ impl<'a> Registry<'a> {
     ) {
         self.trackers
             .push((self.naming, MakeTracker(Box::new(make))));
+    }
+
+    /// Registers how to build this checks plugin for a project, and where
+    /// it runs.
+    pub fn checks(
+        &mut self,
+        on: On,
+        build: impl Fn(&Settings) -> Result<Box<dyn Checks + 'a>, SettingsError> + 'a,
+    ) {
+        let make = MakeChecks {
+            on,
+            build: Box::new(build),
+        };
+        self.checks.push((self.naming, make));
     }
 
     pub fn forge(&mut self, forge: &'a dyn Forge) {
@@ -100,6 +150,42 @@ impl<'a> Registry<'a> {
                 name: Some(name.to_owned()),
                 available: self.trackers.iter().map(|(name, _)| *name).collect(),
             })
+    }
+
+    /// The checks plugins a project runs: every one found in each project,
+    /// then each it `named` that is not, in the project's order.
+    ///
+    /// # Errors
+    ///
+    /// No checks plugin has a name in `named`.
+    pub fn find_checks(
+        &self,
+        named: &[String],
+    ) -> Result<Vec<(&'static str, &MakeChecks<'a>)>, MissingPlugin> {
+        let found = self
+            .checks
+            .iter()
+            .filter(|(_, make)| make.on == On::Found)
+            .map(|(name, make)| (*name, make));
+        let mut runs: Vec<_> = found.collect();
+
+        for wanted in named {
+            let (name, make) = self
+                .checks
+                .iter()
+                .find(|(name, _)| name == wanted)
+                .ok_or_else(|| MissingPlugin {
+                    role: Role::Checks,
+                    name: Some(wanted.clone()),
+                    available: self.checks.iter().map(|(name, _)| *name).collect(),
+                })?;
+
+            if !runs.iter().any(|(running, _)| running == name) {
+                runs.push((*name, make));
+            }
+        }
+
+        Ok(runs)
     }
 
     /// # Errors
@@ -149,6 +235,7 @@ impl fmt::Display for Role {
             Self::Tracker => "tracker",
             Self::Forge => "forge",
             Self::Agent => "agent",
+            Self::Checks => "checks",
         })
     }
 }

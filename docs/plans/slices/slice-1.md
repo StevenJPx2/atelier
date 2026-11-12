@@ -287,7 +287,8 @@ pub trait Worktrees {
 A plugin registers the roles it fills under its name. A tracker is
 registered as a constructor, so each project builds its own from its
 `[[tracker]]` settings; forges and agents are one instance each. A project
-with no agent named takes the build's only one.
+with no agent named takes the build's only one. Checks plugins register as
+[slice 2](slice-2.md#the-checks-role-cratescore) shows.
 
 ```rust
 pub trait Plugin {
@@ -295,7 +296,7 @@ pub trait Plugin {
     fn register<'a>(&'a self, registry: &mut Registry<'a>);
 }
 
-pub enum Role { Tracker, Forge, Agent }
+pub enum Role { Tracker, Forge, Agent, Checks }
 
 pub struct MissingPlugin { pub role: Role, pub name: Option<String>, pub available: Vec<&'static str> }
 

@@ -5,14 +5,14 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use atelier_core::{Pipeline, Project, Repo, Setting, Settings};
+use atelier_core::{Override, Overrides, Pipeline, Project, Repo, Setting, Settings};
 use atelier_git::Repository;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 use serde::Deserialize;
 
 use crate::projects::{Entry, Filter};
 
-const CONFIG: &str = ".atelier/config.toml";
+pub const CONFIG: &str = ".atelier/config.toml";
 
 /// Polling faster than this would only spend rate limit.
 const MIN_POLL_SECS: u64 = 15;
@@ -23,7 +23,6 @@ const DEFAULT_RED_ROUNDS: u8 = 5;
 
 /// `.atelier/config.toml`, as written: only what differs.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct File {
     base: Option<String>,
     #[serde(default)]
@@ -37,6 +36,28 @@ struct File {
     #[serde(default)]
     limits: BTreeMap<String, u8>,
     poll: Option<u64>,
+    #[serde(default)]
+    paths: BTreeMap<String, PathFile>,
+    /// Every other key: each must be a named checks plugin's own table,
+    /// such as `[commands]`.
+    #[serde(flatten)]
+    plugins: BTreeMap<String, toml::Value>,
+}
+
+/// One `[paths."…"]` entry, as written.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PathFile {
+    checks: Option<Vec<String>>,
+    #[serde(default)]
+    skip: Vec<String>,
+}
+
+/// One of a project's named checks plugins, with its own table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckSpec {
+    pub plugin: String,
+    pub settings: Settings,
 }
 
 /// Where a setting came from.
@@ -59,6 +80,8 @@ pub struct TrackerSpec {
 pub struct Resolved {
     pub project: Project,
     pub trackers: Vec<TrackerSpec>,
+    pub checks: Vec<CheckSpec>,
+    pub overrides: Overrides,
     pub forge: String,
     pub agent: Option<String>,
     pub poll: Duration,
@@ -124,8 +147,9 @@ fn build(
     base: String,
     file: File,
 ) -> Result<Resolved> {
-    refuse_unbuilt("checks", &file.checks)?;
     refuse_unbuilt("stage", &file.stages)?;
+    let checks = checks(&file)?;
+    let overrides = overrides(&file.paths)?;
 
     let mut limits = file.limits.clone();
     let red_rounds = limits.remove("red_rounds");
@@ -166,6 +190,15 @@ fn build(
             set(red_rounds.is_some()),
         ),
         ("poll", format!("{poll} s"), set(file.poll.is_some())),
+        (
+            "checks",
+            if file.checks.is_empty() {
+                "none".to_owned()
+            } else {
+                file.checks.join(", ")
+            },
+            set(!file.checks.is_empty()),
+        ),
     ];
 
     Ok(Resolved {
@@ -176,6 +209,8 @@ fn build(
             pipeline,
         },
         trackers,
+        checks,
+        overrides,
         forge,
         agent: file.agent,
         poll: Duration::from_secs(poll),
@@ -190,8 +225,59 @@ fn parse(text: Option<&str>, branch: &str) -> Result<File> {
     )
 }
 
-/// The build has no checks or stage plugins yet, so naming one fails as a
-/// missing plugin does.
+/// Each named checks plugin with its own table. Any other key in the file
+/// is refused, so a misspelt setting is never quietly ignored.
+fn checks(file: &File) -> Result<Vec<CheckSpec>> {
+    if let Some(key) = file.plugins.keys().find(|key| !file.checks.contains(key)) {
+        bail!("{CONFIG}: {key} is unknown; a checks plugin's table needs it in checks");
+    }
+
+    file.checks
+        .iter()
+        .map(|plugin| {
+            let table = match file.plugins.get(plugin) {
+                Some(toml::Value::Table(table)) => table.clone(),
+                Some(_) => bail!("{CONFIG}: {plugin} must be a table"),
+                None => toml::Table::new(),
+            };
+            let settings = settings(table).wrap_err_with(|| format!("{CONFIG}: {plugin}"))?;
+
+            Ok(CheckSpec {
+                plugin: plugin.clone(),
+                settings,
+            })
+        })
+        .collect()
+}
+
+/// `[paths."…"]`, each a folder inside the project, or `.` for all of it.
+fn overrides(paths: &BTreeMap<String, PathFile>) -> Result<Overrides> {
+    let folder = |path: &str| {
+        path == "."
+            || path
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != "..")
+    };
+
+    paths
+        .iter()
+        .map(|(path, entry)| {
+            if !folder(path) {
+                bail!("{CONFIG}: paths.\"{path}\" must be a folder inside the project");
+            }
+
+            let found = Override {
+                checks: entry.checks.clone(),
+                skip: entry.skip.clone(),
+            };
+            Ok((path.clone(), found))
+        })
+        .collect::<Result<_>>()
+        .map(Overrides)
+}
+
+/// The build has no stage plugins yet, so naming one fails as a missing
+/// plugin does.
 fn refuse_unbuilt(role: &str, names: &[String]) -> Result<()> {
     match names.first() {
         Some(name) => bail!("this atelier has no {role} plugin \"{name}\"; it has none"),
@@ -306,6 +392,34 @@ impl fmt::Display for Origin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_override_is_for_a_folder_inside_the_project() {
+        let one = |path: &str| {
+            let entry = PathFile {
+                checks: Some(vec!["commands".into()]),
+                skip: vec!["commands/mutants".into()],
+            };
+            overrides(&BTreeMap::from([(path.to_owned(), entry)]))
+        };
+
+        for path in [".", "docs", "tools/codegen"] {
+            let found = one(path).unwrap();
+            let entry = &found.0[path];
+
+            assert_eq!(entry.checks.as_deref(), Some(&["commands".to_owned()][..]));
+            assert_eq!(entry.skip, ["commands/mutants"]);
+        }
+
+        for path in ["", "..", "../up", "/etc", "docs/", "a/./b", "a//b", "a/.."] {
+            let refusal = one(path).unwrap_err().to_string();
+
+            assert!(
+                refusal.contains("must be a folder inside the project"),
+                "{path:?}"
+            );
+        }
+    }
 
     #[test]
     fn a_github_remote_names_its_repository_over_https_or_ssh() {

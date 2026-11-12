@@ -1,8 +1,8 @@
 # Slice 2: run a project's gates
 
-**Status: In progress.** The checks role in core and the `commands` plugin
-are built. Next come running gates, the commit hook, GitHub's CI, and
-atelier checking itself.
+**Status: In progress.** The checks role in core, the `commands` plugin,
+and `atelier gates`, `check` and `fix` are built. Next come the commit
+hook, GitHub's CI, and atelier checking itself.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -208,14 +208,13 @@ unviable.
 
 The project names its gates as commands, each with an optional `root`
 (default `.`), `fix` and `setup`. It finds nothing by itself, so a
-project turns it on in `checks`. A gate is named `commands/<name>`. When
-there is a diff, its base is in `ATELIER_BASE`, so a gate such as mutation
-testing can test only the diff:
+project turns it on in `checks`. A gate is named `commands/<name>`.
+`atelier check` puts the base the changes are measured from in
+`ATELIER_BASE`, so a gate such as mutation testing can test only them:
 
 ```toml
 [commands.mutants]
 run = '''
-[ -z "$ATELIER_BASE" ] && exit 0
 diff=$(mktemp) && git diff "$ATELIER_BASE" > "$diff"
 cargo mutants --in-diff "$diff"
 '''
@@ -281,28 +280,116 @@ atelier gates --json --diff origin/main
 # [{"gate":"commands/clippy","root":"."}]
 
 atelier check --setup --gate commands/clippy --root .
-# .  commands/clippy  pass  21 s
+# .  commands/clippy  pass    21.0 s
 
 atelier fix --staged
-# .  commands/clippy  fixed  src/lib.rs
+# .  commands/clippy  fixed
 ```
 
 - `gates` lists each root and its gates; `--diff <base>` keeps those whose
-  root the diff from `<base>` touches.
-- `check` runs them, by default those the changes from `origin/<base>`
-  touch, committed or not. Each runs as `sh -c` in its root, after its setup
-  with `--setup`, within 60 minutes. A failure prints the end of its output,
-  and any failure exits 1.
-- `fix` runs the fixes of the roots its files touch: the staged files with
-  `--staged`, or the files given.
+  root the changes since `<base>` touch.
+- `check` runs the gates the changes since `origin/<base>` touch, committed
+  or not, or one gate in one root with `--gate` and `--root`. Each runs as
+  `sh -c` in its root, after its setup with `--setup`, within an hour, with
+  the base in `ATELIER_BASE` (`--diff` names another). A failure prints the
+  last 40 lines of its output, and any failure exits 1.
+- `fix` runs the fixes of the roots its files touch: the files given, or
+  the staged files with `--staged`, which are then staged again, except
+  those with unstaged changes too. A failed fix exits 1.
 
-Files: `crates/cli/src/gates.rs`, `crates/cli/src/commands.rs`.
+Files: `crates/cli/src/gates.rs`, `crates/git/src/tree.rs`.
 
-Verified through the real binary in temporary repositories with real git: a
-diff touching one root of two plans that root alone; a failing gate exits 1
-and prints its output; `--setup` runs setup first; `--json` prints the
-matrix; an override shows in `gates`; a gate added on the pull request's
-branch is not run until it is on the base.
+#### Structure
+
+The three commands, each in a checkout. Each reads the project's settings
+from `origin`, as the daemon does, and the checkout's working tree.
+
+```rust
+pub fn list(path: &Path, diff: Option<&str>, json: bool) -> Result<()>;
+
+pub struct Selection<'a> {
+    pub diff: Option<&'a str>,
+    pub gate: Option<&'a str>,
+    pub root: Option<&'a str>,
+    pub setup: bool,
+}
+
+pub fn check(path: &Path, selection: &Selection<'_>) -> Result<ExitCode>;
+pub fn fix(path: &Path, staged: bool, files: &[String]) -> Result<ExitCode>;
+```
+
+A working tree lists its files once, as git does: tracked, and untracked
+unless ignored, from the top of the checkout. `changed` is every file
+changed since a base: committed since the commit it shares with `HEAD`,
+staged, unstaged or untracked. `read` refuses a path that leaves the tree.
+
+```rust
+pub struct WorkingTree {
+    root: PathBuf,
+    files: Vec<String>,
+}
+
+impl WorkingTree {
+    pub fn read(folder: &Path) -> Result<Self, PluginError>;
+    pub fn root(&self) -> &Path;
+    pub fn changed(&self, base: &str) -> Result<Vec<String>, PluginError>;
+    pub fn staged(&self) -> Result<Staged, PluginError>;
+    pub fn stage(&self, files: &[String]) -> Result<(), PluginError>;
+}
+
+impl Tree for WorkingTree {}
+
+pub struct Staged {
+    pub files: Vec<String>,
+    pub partly: Vec<String>,
+}
+```
+
+The config names its checks plugins in `checks`, each with its own table,
+and its overrides in `[paths."…"]`, each a folder inside the project. Any
+other key is refused, so a misspelt table is never quietly ignored. The
+build makes each plugin from its table; a setting it cannot use names its
+path, such as `commands.fmt.run`.
+
+```rust
+pub struct CheckSpec {
+    pub plugin: String,
+    pub settings: Settings,
+}
+
+pub struct Resolved {
+    pub checks: Vec<CheckSpec>,
+    pub overrides: Overrides,
+    …
+}
+
+impl Build {
+    pub fn checks(
+        &self,
+        resolved: &Resolved,
+    ) -> Result<Vec<(&'static str, Box<dyn Checks + '_>)>>;
+}
+```
+
+#### Verification
+
+Through the real binary, in a checkout whose gates are real shell commands:
+`gates` lists each root and its gates, and the matrix for a change under
+`docs` holds only the `docs` gate; `check` runs only the gates the changes
+touch, and a failing one exits 1 and prints its output; one gate by name runs, after its setup
+with `--setup`, with `ATELIER_BASE` set to `origin/main` or to `--diff`'s
+base, and an unknown one is refused; `fix --staged` fixes a staged file and
+stages it again, and leaves a partly staged one as staged; a gate added on
+the branch is not run until it is on the base. `status` refuses an unbuilt
+checks plugin, a misspelt plugin table, a gate the plugin cannot use, and a
+path outside the project. The working tree, against real repositories: it
+lists tracked and untracked files but not ignored ones, from any folder of
+the checkout; `changed` counts commits and every uncommitted change, and
+refuses an unknown base; staged files are told apart from partly staged
+ones; `read` stays inside the tree. A unit test accepts `.`, `docs` and
+`tools/codegen` as override paths and refuses eight that are no folder
+inside the project. Mutation testing over the diff: 63 mutants, 50 caught,
+13 unviable.
 
 ### Fixes before each commit (`crates/git`, `crates/cli`)
 

@@ -16,6 +16,11 @@ brew services start atelier
 
 # each project's settings, where each came from, and each issue
 atelier status
+
+# in a checkout: its gates, run the ones the changes touch, fix staged files
+atelier gates
+atelier check
+atelier fix --staged
 ```
 
 ```text
@@ -43,6 +48,7 @@ flowchart LR
 | ------------------ | -------------------------------------------------------------------- |
 | `main.rs`          | The commands                                                         |
 | `commands.rs`      | `init`, `add` and `status`                                           |
+| `gates.rs`         | `gates`, `check` and `fix`, in a checkout                            |
 | `clone.rs`         | atelier's own bare clone of each project, made when missing          |
 | `paths.rs`         | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
 | `projects.rs`      | `projects.toml`: your projects and your own filters                  |

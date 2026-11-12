@@ -1,7 +1,8 @@
 # Worktrees
 
 Each issue's builder works in its own worktree, on its own branch, made
-through the `git` command and the user's own sign-ins.
+from atelier's own clone of the project through the `git` command and the
+user's own sign-ins. The crate also reads a checkout's files for the gates.
 
 ```mermaid
 flowchart TD
@@ -15,17 +16,21 @@ flowchart TD
     Remote -->|"no"| New["worktree add, new from origin/base"]
 ```
 
-| File          | Holds                                                    |
-| ------------- | -------------------------------------------------------- |
-| `worktree.rs` | `Git`, core's `Worktrees`, and where each worktree lives |
-| `command.rs`  | Running `git` through `atelier-command`, never prompting |
+| File            | Holds                                                          |
+| --------------- | -------------------------------------------------------------- |
+| `worktree.rs`   | `Git`, core's `Worktrees`, and where each worktree lives       |
+| `repository.rs` | `Repository`: a project's bare clone or checkout, and `origin` |
+| `tree.rs`       | `WorkingTree`: a checkout's files, core's `Tree`, its changes  |
+| `folder.rs`     | Folder names from a repository's, kept inside their root       |
+| `command.rs`    | Running `git` through `atelier-command`, never prompting       |
 
 ```rust
 let git = Git::new("/Users/me/.local/share/atelier/worktrees");
+let clone = Path::new("/Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git");
 
 let tree = git.create(&WorktreeRequest {
     repo: &Repo("StevenJPx2/chauffeur".into()),
-    local: Path::new("/Users/me/Documents/Projects/chauffeur"),
+    local: clone,
     name: "issue-12",
     branch: "issue-12-fix-the-dead-link",
     base: "v2",

@@ -71,6 +71,8 @@ dependencies = [
 name = "atelier-cli"
 version = "0.1.0-rc.6"
 dependencies = [
+ "atelier-command",
+ "atelier-commands",
  "atelier-core",
  "atelier-git",
  "atelier-github",

@@ -24,7 +24,9 @@
 mod command;
 mod folder;
 mod repository;
+mod tree;
 mod worktree;
 
 pub use repository::Repository;
+pub use tree::{Staged, WorkingTree};
 pub use worktree::Git;

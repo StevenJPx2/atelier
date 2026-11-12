@@ -1,6 +1,7 @@
 //! The real `atelier` binary, with real git and a real `origin`, and
 //! stand-ins for GitHub and `OpenCode` built from their captured replies.
 
+mod gates;
 mod sandbox;
 
 use std::fs;
@@ -8,7 +9,7 @@ use std::fs;
 use sandbox::{REPO, Sandbox, git};
 use serde_json::json;
 
-fn labelled(labels: &[&str]) -> serde_json::Value {
+pub(crate) fn labelled(labels: &[&str]) -> serde_json::Value {
     json!({ "12": { "title": "Fix the dead link", "state": "open", "labels": labels, "assignee": null } })
 }
 
@@ -408,7 +409,19 @@ fn settings_atelier_cannot_run_are_refused_by_name() {
         ("poll = 10\n", "poll is 10; it must be at least 15 seconds"),
         (
             "checks = [\"docs\"]\n",
-            "this atelier has no checks plugin \"docs\"; it has none",
+            "this atelier has no checks plugin \"docs\"; it has commands",
+        ),
+        (
+            "[commandz.fmt]\nrun = \"cargo fmt\"\n",
+            "commandz is unknown; a checks plugin's table needs it in checks",
+        ),
+        (
+            "checks = [\"commands\"]\n[commands.fmt]\nrun = \"\"\n",
+            ".atelier/config.toml: commands.fmt.run: must be a command",
+        ),
+        (
+            "[paths.\"../up\"]\nskip = []\n",
+            "paths.\"../up\" must be a folder inside the project",
         ),
         (
             "stages = [\"critic\"]\n",

@@ -13,6 +13,8 @@ name = "atelier"
 path = "src/main.rs"
 
 [dependencies]
+atelier-command = { path = "../command" }
+atelier-commands = { path = "../../plugins/commands" }
 atelier-core = { path = "../core" }
 atelier-git = { path = "../git" }
 atelier-github = { path = "../../plugins/github" }

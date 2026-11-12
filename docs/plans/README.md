@@ -13,7 +13,7 @@ flowchart LR
 | Slice                                   | Status                    | Plan                                                                  |
 | --------------------------------------- | ------------------------- | --------------------------------------------------------------------- |
 | 0: Install and run atelier              | Implemented, `0.1.0-rc.2` | [Setup](slices/slice-0.md)                                            |
-| 1: A label becomes a ready pull request | Implemented, `0.1.0-rc.5` | [The loop](slices/slice-1.md)                                         |
+| 1: A label becomes a ready pull request | Implemented, `0.1.0-rc.6` | [The loop](slices/slice-1.md)                                         |
 | 2: Run project gates in forge CI        | Planned                   | [Gates](https://github.com/StevenJPx2/atelier/issues/1#slice-2-gates) |
 
 The [architecture and ordered slice list](https://github.com/StevenJPx2/atelier/issues/1)

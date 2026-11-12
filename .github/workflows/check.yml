@@ -36,7 +36,7 @@ jobs:
       - run: cargo deny check
       - run: cargo shear
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-      - run: npx --yes prettier@3.9.10 --check crates/README.md scripts/README.md 'docs/**/*.md'
+      - run: npx --yes prettier@3.9.10 --check crates/README.md scripts/README.md site/README.md 'docs/**/*.md'
       - name: Mutation tests on the pull request's diff
         if: github.event_name == 'pull_request'
         env:

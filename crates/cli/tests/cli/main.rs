@@ -268,6 +268,7 @@ fn init_makes_the_labels_the_project_sets() {
     let made: Vec<String> = sandbox
         .gh_calls()
         .iter()
+        .filter(|call| call[..2] == ["label", "create"])
         .map(|call| call[2].clone())
         .collect();
     assert!(
@@ -291,18 +292,75 @@ fn init_makes_the_labels_the_project_sets() {
 }
 
 #[test]
-fn add_refuses_another_repository_and_a_second_add() {
+fn add_clones_the_project_and_refuses_one_it_cannot_reach_or_already_watches() {
     let sandbox = Sandbox::new(&labelled(&[]));
-    let path = sandbox.checkout.to_string_lossy().into_owned();
 
-    let other = sandbox.atelier(&["add", "StevenJPx2/other", "--path", &path]);
-    let again = sandbox.atelier(&["add", REPO, "--path", &path]);
+    let missing = sandbox.atelier(&["add", "StevenJPx2/missing"]);
+    let unsafe_name = sandbox.atelier(&["add", "StevenJPx2/.."]);
+    let again = sandbox.atelier(&["add", REPO]);
 
-    assert!(
-        String::from_utf8_lossy(&other.stderr)
-            .contains("has origin StevenJPx2/demo, not StevenJPx2/other")
+    let clone = sandbox.clone();
+    assert_eq!(git(&clone, &["rev-parse", "--is-bare-repository"]), "true");
+    assert_eq!(
+        git(&clone, &["config", "--get", "remote.origin.url"]),
+        "https://github.com/StevenJPx2/demo.git"
     );
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("cannot reach StevenJPx2/missing"),
+        "{}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+    assert!(
+        !sandbox
+            .home
+            .join(".local/share/atelier/clones/StevenJPx2/missing.git")
+            .exists()
+    );
+    assert!(String::from_utf8_lossy(&unsafe_name.stderr).contains("cannot name a folder"));
     assert!(String::from_utf8_lossy(&again.stderr).contains("already watched"));
+    let projects = fs::read_to_string(sandbox.home.join(".config/atelier/projects.toml")).unwrap();
+    assert_eq!(projects.matches("[[project]]").count(), 1, "{projects}");
+}
+
+#[test]
+fn the_daemon_works_from_its_own_clone_and_never_from_your_checkout() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let checkout = sandbox.checkout.to_string_lossy().into_owned();
+    fs::write(
+        sandbox.home.join(".config/atelier/projects.toml"),
+        format!("[[project]]\nrepo = \"{REPO}\"\npath = \"{checkout}\"\n"),
+    )
+    .unwrap();
+    fs::remove_dir_all(sandbox.clone()).unwrap();
+    let before = git(&sandbox.checkout, &["for-each-ref", "--format=%(refname)"]);
+
+    let daemon = sandbox.daemon();
+    sandbox.wait("a builder", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("building")
+    });
+    drop(daemon);
+
+    let worktree = sandbox
+        .home
+        .join(".local/share/atelier/worktrees/StevenJPx2/demo/issue-12");
+    let common = git(
+        &worktree,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    );
+    assert_eq!(
+        std::path::Path::new(&common),
+        sandbox.clone().canonicalize().unwrap()
+    );
+    assert_eq!(
+        git(&sandbox.checkout, &["worktree", "list", "--porcelain"])
+            .matches("worktree ")
+            .count(),
+        1
+    );
+    assert_eq!(
+        git(&sandbox.checkout, &["for-each-ref", "--format=%(refname)"]),
+        before
+    );
 }
 
 #[test]
@@ -405,10 +463,9 @@ fn a_project_removed_from_your_list_stops_being_watched() {
 fn xdg_folders_are_used_and_an_empty_one_is_ignored() {
     let sandbox = Sandbox::new(&labelled(&[]));
     let elsewhere = sandbox.root.join("xdg");
-    let path = sandbox.checkout.to_string_lossy().into_owned();
 
     let added = sandbox
-        .command(&["add", REPO, "--path", &path])
+        .command(&["add", REPO])
         .env("XDG_CONFIG_HOME", &elsewhere)
         .output()
         .unwrap();

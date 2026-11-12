@@ -13,7 +13,9 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Entry {
     pub repo: String,
-    pub path: PathBuf,
+    /// Your checkout, which atelier read before it kept its own clone; no
+    /// longer read.
+    pub path: Option<PathBuf>,
     /// Your own filter for each tracker, by plugin name.
     #[serde(default)]
     pub filter: BTreeMap<String, Filter>,
@@ -60,7 +62,7 @@ pub fn read(path: &Path) -> Result<Vec<Entry>> {
 /// # Errors
 ///
 /// The project is already watched, or the file cannot be written.
-pub fn add(path: &Path, repo: &str, checkout: &Path) -> Result<()> {
+pub fn add(path: &Path, repo: &str) -> Result<()> {
     if read(path)?.iter().any(|entry| entry.repo == repo) {
         bail!("{repo} is already watched; see {}", path.display());
     }
@@ -71,13 +73,12 @@ pub fn add(path: &Path, repo: &str, checkout: &Path) -> Result<()> {
 
     // A JSON string is a valid TOML basic string, escapes included.
     let repo = serde_json::to_string(repo)?;
-    let checkout = serde_json::to_string(&checkout.to_string_lossy())?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)?;
 
-    write!(file, "\n[[project]]\nrepo = {repo}\npath = {checkout}\n")?;
+    write!(file, "\n[[project]]\nrepo = {repo}\n")?;
 
     Ok(())
 }

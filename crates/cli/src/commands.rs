@@ -7,6 +7,7 @@ use atelier_git::Repository;
 use atelier_github::GitHub;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 
+use crate::clone;
 use crate::config::{self, repo_from_url};
 use crate::paths::Paths;
 use crate::projects::{self, Entry};
@@ -25,7 +26,7 @@ fn here(path: &Path) -> Result<(Repository, Entry)> {
         local,
         Entry {
             repo,
-            path,
+            path: None,
             filter: std::collections::BTreeMap::default(),
         },
     ))
@@ -66,24 +67,25 @@ pub fn init(_paths: &Paths, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Watches the project whose checkout is at `path`.
+/// Watches `repo`, making atelier's own clone of it. A clone made for a
+/// repository it cannot reach is removed again.
 ///
 /// # Errors
 ///
-/// The checkout's `origin` is another repository, or it is already watched.
-pub fn add(paths: &Paths, repo: &str, path: &Path) -> Result<()> {
-    let (_, entry) = here(path)?;
+/// `repo` is not `owner/name`, cannot be reached, or is already watched.
+pub fn add(paths: &Paths, repo: &str) -> Result<()> {
+    let fresh = !clone::of(paths, repo)?.exists();
+    let local = clone::ensure(paths, repo)?;
 
-    if !entry.repo.eq_ignore_ascii_case(repo) {
-        bail!(
-            "{} has origin {}, not {repo}",
-            entry.path.display(),
-            entry.repo
-        );
+    if let Err(error) = local.default_branch() {
+        if fresh {
+            let _ = std::fs::remove_dir_all(local.path());
+        }
+        return Err(error).wrap_err_with(|| format!("cannot reach {repo}"));
     }
 
-    projects::add(&paths.projects(), repo, &entry.path)?;
-    println!("watching {repo} at {}", entry.path.display());
+    projects::add(&paths.projects(), repo)?;
+    println!("watching {repo}, cloned in {}", local.path().display());
 
     Ok(())
 }
@@ -98,15 +100,20 @@ pub fn status(paths: &Paths) -> Result<()> {
     let states = state::load(&paths.state_file())?;
 
     for entry in projects::read(&paths.projects())? {
-        println!("{}  {}", entry.repo, entry.path.display());
+        let local = clone::of(paths, &entry.repo)?;
+        println!("{}  {}", entry.repo, local.path().display());
 
-        match config::resolve(&entry, &Repository::new(paths.expand(&entry.path))) {
-            Ok(resolved) => {
-                for (name, value, origin) in &resolved.shown {
-                    println!("  {name:<11} {value:<24} {origin}");
+        if local.exists() {
+            match config::resolve(&entry, &local) {
+                Ok(resolved) => {
+                    for (name, value, origin) in &resolved.shown {
+                        println!("  {name:<11} {value:<24} {origin}");
+                    }
                 }
+                Err(error) => println!("  settings: {error:#}"),
             }
-            Err(error) => println!("  settings: {error:#}"),
+        } else {
+            println!("  settings: not cloned yet; the daemon clones it");
         }
 
         let Some(state) = states.get(&entry.repo) else {

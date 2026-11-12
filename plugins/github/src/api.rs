@@ -8,7 +8,7 @@ use std::time::Duration;
 use atelier_core::{Failure, PluginError, Repo};
 
 /// The longest one call to GitHub may take.
-const DEADLINE: Duration = Duration::from_secs(30);
+pub const DEADLINE: Duration = Duration::from_secs(30);
 
 /// How long to wait when GitHub limits atelier without saying how long.
 const DEFAULT_WAIT_SECS: u64 = 60;

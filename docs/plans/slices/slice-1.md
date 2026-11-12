@@ -483,19 +483,27 @@ cargo mutants -p atelier-core
 
 ### Worktrees (`crates/git`)
 
-A worktree for each issue under
-`~/.local/share/atelier/worktrees/<owner>/<repo>/issue-<n>`, on the issue's
-branch: reused when it is there, made from the local branch, the branch on
-`origin`, or a new branch from `origin/<base>`.
+atelier's own bare clone of each project, under
+`~/.local/share/atelier/clones/<owner>/<repo>.git`, and a worktree for each
+issue under `~/.local/share/atelier/worktrees/<owner>/<repo>/issue-<n>`, on
+the issue's branch: reused when it is there, made from the local branch, the
+branch on `origin`, or a new branch from `origin/<base>`. Neither is in a
+folder macOS guards, such as `~/Documents`, so the daemon never waits on its
+folder prompt.
 
 Files: [`crates/git/`](../../../crates/git/README.md).
 
 ```rust
+let repo = Repo("StevenJPx2/chauffeur".into());
+let local = Repository::under(Path::new("/Users/me/.local/share/atelier/clones"), &repo)?;
+local.create("https://github.com/StevenJPx2/chauffeur.git")?;
+// → /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git, bare
+
 let git = Git::new("/Users/me/.local/share/atelier/worktrees");
 
 let tree = git.create(&WorktreeRequest {
-    repo: &Repo("StevenJPx2/chauffeur".into()),
-    local: Path::new("/Users/me/Documents/Projects/chauffeur"),
+    repo: &repo,
+    local: local.path(),
     name: "issue-12",
     branch: "issue-12-fix-the-dead-link",
     base: "v2",
@@ -505,10 +513,36 @@ let tree = git.create(&WorktreeRequest {
 
 #### Structure
 
+`Repository` is a project's local repository: atelier's clone, or your
+checkout for `atelier init`. `create` makes a bare repository with `origin`
+and fetches nothing; each branch is fetched when needed into
+`origin/<branch>`, and its only local branches are the issues'. A clone with
+another `origin` is refused.
+
+```rust
+pub struct Repository {
+    path: PathBuf,
+}
+
+impl Repository {
+    pub fn new(path: impl Into<PathBuf>) -> Self;
+    pub fn under(root: &Path, repo: &Repo) -> Result<Self, PluginError>;
+    pub fn path(&self) -> &Path;
+    pub fn exists(&self) -> bool;
+    pub fn create(&self, url: &str) -> Result<(), PluginError>;
+    pub fn origin(&self) -> Result<String, PluginError>;
+    pub fn default_branch(&self) -> Result<String, PluginError>;
+    pub fn fetch(&self, branch: &str) -> Result<(), PluginError>;
+    pub fn show(&self, branch: &str, path: &str) -> Result<Option<String>, PluginError>;
+}
+```
+
 `Git` fills core's `Worktrees` role. A worktree already on another branch
 is refused; a local branch is never reset; removing forces out what the
-builder left and keeps the branch. A repository that is not `owner/name`,
-or a part that could leave the root, is refused.
+builder left and keeps the branch, running git inside the worktree so one
+made from your checkout before atelier kept its own clone goes too. A
+repository that is not `owner/name`, or a part that could leave the root, is
+refused.
 
 ```rust
 pub struct Git {
@@ -533,12 +567,15 @@ fn checked(dir: &Path, args: &[&str]) -> Result<String, PluginError>;
 
 #### Verification
 
-Tests against real repositories: a bare `origin` with `v2`, and a clone as
-the checkout. A new branch starts from the newest `origin/v2` and is reused;
+Tests against real repositories: a bare `origin` with `v2`, and atelier's
+bare clone of it, made as the daemon makes it. The clone is bare, has its
+`origin` and no branch, and another `origin` is refused. A new branch starts
+from the newest `origin/v2` and is reused;
 a local branch keeps its commits; a branch only on `origin` is continued and
 tracked; a folder on another branch is refused; removing drops the worktree
-and its changes, keeps the branch, and succeeds twice; names that could leave
-the root are refused. Only remote failures are transient.
+and its changes, keeps the branch, and succeeds twice; a worktree made from
+your checkout is removed too; names that could leave the root are refused,
+for worktrees and clones. Only remote failures are transient.
 
 ```sh
 cargo nextest run -p atelier-git
@@ -804,10 +841,10 @@ atelier init
 # StevenJPx2/chauffeur: labels atelier:build, atelier:working, atelier:blocked, improvement
 
 atelier add StevenJPx2/chauffeur
-# watching StevenJPx2/chauffeur at /Users/me/Documents/Projects/chauffeur
+# watching StevenJPx2/chauffeur, cloned in /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git
 
 atelier status
-# StevenJPx2/chauffeur  /Users/me/Documents/Projects/chauffeur
+# StevenJPx2/chauffeur  /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git
 #   base        v2                       set
 #   trackers    github                   found
 #   forge       github                   found
@@ -826,7 +863,7 @@ kept in `state.json`, so `status` asks no forge.
 
 The project's config is read from `origin`: its default branch for `base`,
 and `origin/<base>` for the rest, so a branch cannot change its limits. Each
-setting has a default found from the checkout: the tracker and forge from
+setting has a default found from the clone: the tracker and forge from
 `origin`'s host, the only agent in the build, `red_rounds` 5, `poll` 30 s
 (at least 15). A `[[tracker]]` entry's `plugin` and `filter` are atelier's;
 the rest are the plugin's settings. Your filter in `projects.toml` and the
@@ -858,12 +895,13 @@ pub fn repo_from_url(url: &str) -> Option<String>;
 ```
 
 Your projects, with your own filter for each tracker by plugin name. `add`
-appends to the file and leaves the rest as written.
+appends to the file and leaves the rest as written. A `path` to your
+checkout, from before atelier kept its own clone, is accepted and not read.
 
 ```rust
 pub struct Entry {
     pub repo: String,
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
     pub filter: BTreeMap<String, Filter>,
 }
 
@@ -879,7 +917,22 @@ impl Filter {
 }
 
 pub fn read(path: &Path) -> Result<Vec<Entry>>;
-pub fn add(path: &Path, repo: &str, checkout: &Path) -> Result<()>;
+pub fn add(path: &Path, repo: &str) -> Result<()>;
+```
+
+Each project's clone. `add` makes it, and removes it again when the
+repository cannot be reached; each poll makes it when it is missing, so a
+project added before has its clone from the next poll. The URL is GitHub's,
+over the protocol `gh` uses, as `gh repo clone` does: HTTPS unless set to
+SSH. `status` only reads it.
+
+```rust
+pub fn of(paths: &Paths, repo: &str) -> Result<Repository>;
+pub fn ensure(paths: &Paths, repo: &str) -> Result<Repository>;
+
+impl GitHub {
+    pub fn clone_url(&self, repo: &Repo) -> Result<String, PluginError>;
+}
 ```
 
 `Build` holds one instance of each plugin crate; `plugins` builds a project's
@@ -929,7 +982,9 @@ pub fn spawn(entry: Entry, paths: Paths, writer: Writer, stop: Arc<AtomicBool>) 
 #### Verification
 
 Tests run the real binary with real git, a real `origin` reached as
-`https://github.com/StevenJPx2/demo.git` through git's `insteadOf`, and
+`https://github.com/StevenJPx2/demo.git` through the sandbox home's
+`insteadOf`, which sends every `https://github.com/` repository to a local
+folder, and
 stand-ins for `gh` and `opencode` first on `PATH`, built from their captured
 replies; the `gh` stand-in keeps each issue's labels. A labelled issue gets
 one builder across polls and a restart, on its own branch, with one comment,
@@ -938,8 +993,11 @@ GitHub; passing checks wake the builder with one prompt; removing the working
 label interrupts the builder, then tells it to stand down; a second daemon refuses to start, naming the first;
 an issue assigned to someone else is left alone under your filter; a builder
 that cannot start blocks its issue; a plugin the build lacks fails that
-project by name; `init` makes the labels the project sets; `add` refuses
-another repository and a second add.
+project by name; `init` makes the labels the project sets; `add` makes a
+bare clone with GitHub's URL, and refuses a repository it cannot reach,
+leaving no clone, a name that could leave the root, and a second add; with an
+entry from before, naming your checkout, the daemon makes its own clone and
+works from it, and your checkout gains no worktree and no branch.
 
 ## End to end
 
@@ -954,14 +1012,11 @@ followed by the Homebrew service, as
 | [atelier#20](https://github.com/StevenJPx2/atelier/issues/20) → [#21](https://github.com/StevenJPx2/atelier/pull/21)            | Five red rounds block the issue: `atelier:blocked` replaces `atelier:working`, atelier comments why, and the builder stands down.                                                                                                                                                                                 |
 | [chauffeur#6](https://github.com/StevenJPx2/chauffeur/issues/6) → [chauffeur#8](https://github.com/StevenJPx2/chauffeur/pull/8) | Chauffeur's whole config is `base = "v2"`: the worktree starts from `origin/v2` and the pull request goes into `v2`. The site build and every check pass; atelier tells the builder, which marks it ready 18 seconds later. The merge into `v2`, not the default branch, still closes the issue, through atelier. |
 
-The runs shape two parts of the design: sourcefed suppresses passing checks, so
-atelier tells the builder when every check passed
-([#18](https://github.com/StevenJPx2/atelier/pull/18)); and a pull request's
+The runs shape three parts of the design. sourcefed suppresses passing
+checks, so atelier tells the builder when every check passed
+([#18](https://github.com/StevenJPx2/atelier/pull/18)). A pull request's
 events still wake an interrupted builder, so atelier tells it to stand down
-([#22](https://github.com/StevenJPx2/atelier/pull/22)).
-
-Under launchd, git in a checkout in `~/Documents` waits on macOS's folder
-prompt, which a new release can bring back; the daemon logs
-`git ran past 120s` until it is allowed. atelier's own clones outside
-`~/Documents` are planned in
-[#1](https://github.com/StevenJPx2/atelier/issues/1#ateliers-own-clones).
+([#22](https://github.com/StevenJPx2/atelier/pull/22)). And under launchd,
+git in a checkout in `~/Documents` waits on macOS's folder prompt, which
+each release brings back, so the daemon works only from
+[its own clones](https://github.com/StevenJPx2/atelier/issues/1#ateliers-own-clones).

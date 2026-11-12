@@ -1,7 +1,8 @@
-//! Where atelier keeps your projects, its state and the worktrees.
+//! Where atelier keeps your projects, its state, its clones and the
+//! worktrees.
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use color_eyre::eyre::{Result, eyre};
 
@@ -11,7 +12,6 @@ pub struct Paths {
     pub config: PathBuf,
     pub state: PathBuf,
     pub data: PathBuf,
-    home: PathBuf,
 }
 
 impl Paths {
@@ -37,7 +37,6 @@ impl Paths {
             config: under("XDG_CONFIG_HOME", ".config"),
             state: under("XDG_STATE_HOME", ".local/state"),
             data: under("XDG_DATA_HOME", ".local/share"),
-            home: home.clone(),
         })
     }
 
@@ -53,13 +52,13 @@ impl Paths {
         self.state.join("daemon.lock")
     }
 
-    pub fn worktrees(&self) -> PathBuf {
-        self.data.join("worktrees")
+    /// atelier's own bare clone of each project, outside the folders macOS
+    /// guards, such as `~/Documents`.
+    pub fn clones(&self) -> PathBuf {
+        self.data.join("clones")
     }
 
-    /// `path` with a leading `~` as your home.
-    pub fn expand(&self, path: &Path) -> PathBuf {
-        path.strip_prefix("~")
-            .map_or_else(|_| path.to_owned(), |rest| self.home.join(rest))
+    pub fn worktrees(&self) -> PathBuf {
+        self.data.join("worktrees")
     }
 }

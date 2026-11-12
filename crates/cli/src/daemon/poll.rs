@@ -6,10 +6,11 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use atelier_core::{Failure, PluginError, Report, State, act, observe};
-use atelier_git::{Git, Repository};
+use atelier_git::Git;
 use color_eyre::eyre::Result;
 
 use super::writer::Writer;
+use crate::clone;
 use crate::config;
 use crate::log::log;
 use crate::paths::Paths;
@@ -44,7 +45,6 @@ pub fn spawn(
 }
 
 fn run(entry: &Entry, paths: &Paths, writer: &Writer, stop: &AtomicBool) {
-    let local = Repository::new(paths.expand(&entry.path));
     let git = Git::new(paths.worktrees());
     let mut failures: u32 = 0;
     let mut state = match writer.load(&entry.repo) {
@@ -55,7 +55,7 @@ fn run(entry: &Entry, paths: &Paths, writer: &Writer, stop: &AtomicBool) {
     log(&entry.repo, "watching");
 
     while !stop.load(Ordering::Relaxed) {
-        let wait = match once(entry, &local, &git, &mut state, writer) {
+        let wait = match once(entry, paths, &git, &mut state, writer) {
             Ok((report, poll)) => {
                 failures = 0;
                 tell(&entry.repo, &report);
@@ -74,12 +74,13 @@ fn run(entry: &Entry, paths: &Paths, writer: &Writer, stop: &AtomicBool) {
 
 fn once(
     entry: &Entry,
-    local: &Repository,
+    paths: &Paths,
     git: &Git,
     state: &mut State,
     writer: &Writer,
 ) -> Result<(Report, Duration)> {
-    let resolved = config::resolve(entry, local)?;
+    let local = clone::ensure(paths, &entry.repo)?;
+    let resolved = config::resolve(entry, &local)?;
     let instances = Build::new();
     let built = instances.plugins(&resolved)?;
     let plugins = built.plugins(git);

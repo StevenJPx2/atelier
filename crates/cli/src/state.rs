@@ -30,6 +30,8 @@ struct IssueFile {
     branch: String,
     worktree: Option<PathBuf>,
     session: Option<SessionFile>,
+    #[serde(default)]
+    pull_request: Option<u64>,
     pending: Vec<ActionFile>,
 }
 
@@ -158,6 +160,7 @@ impl From<ProjectFile> for State {
                     id: session.id,
                     title: session.title,
                 }),
+                pull_request: issue.pull_request,
                 pending: issue.pending.into_iter().map(Action::from).collect(),
             };
             (key, record)
@@ -187,6 +190,7 @@ impl From<&State> for ProjectFile {
                 id: session.id.clone(),
                 title: session.title.clone(),
             }),
+            pull_request: record.pull_request,
             pending: record
                 .pending
                 .iter()
@@ -387,6 +391,7 @@ mod tests {
                 id: "ses_1".into(),
                 title: "#1".into(),
             });
+            record.pull_request = Some(8);
             state.issues.insert(key, record);
         }
         state

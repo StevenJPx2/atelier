@@ -88,7 +88,8 @@ pub fn add(paths: &Paths, repo: &str, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Prints each project's settings, where each came from, and each issue.
+/// Prints each project's settings, where each came from, and each issue
+/// with its pull request, from the state alone: it asks no forge.
 ///
 /// # Errors
 ///
@@ -119,8 +120,14 @@ pub fn status(paths: &Paths) -> Result<()> {
                 .session
                 .as_ref()
                 .map_or("-", |session| session.id.as_str());
+            let pull_request = record
+                .pull_request
+                .map_or_else(|| "-".to_owned(), |number| format!("#{number}"));
 
-            println!("  {key:<11} {phase:<24} {}  {session}", record.branch);
+            println!(
+                "  {key:<11} {phase:<24} {}  {session}  {pull_request}",
+                record.branch
+            );
         }
     }
 

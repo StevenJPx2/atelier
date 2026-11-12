@@ -85,6 +85,37 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
         "{status}"
     );
     assert!(status.contains("github#12   Building"), "{status}");
+    assert!(
+        status
+            .lines()
+            .any(|line| line.contains("github#12") && line.ends_with("  -")),
+        "{status}"
+    );
+}
+
+#[test]
+fn status_shows_the_pull_request_a_builder_opened() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let daemon = sandbox.daemon();
+    sandbox.wait("a builder", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("building")
+    });
+
+    sandbox.open_pull_request("issue-12-fix-the-dead-link", 8);
+    sandbox.wait("the pull request", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("open")
+    });
+    drop(daemon);
+
+    let before = sandbox.gh_calls().len();
+    let status = sandbox.status();
+    let line = status
+        .lines()
+        .find(|line| line.contains("github#12"))
+        .unwrap_or_default();
+    assert!(line.contains("Open { rounds: 0 }"), "{status}");
+    assert!(line.ends_with("  #8"), "{status}");
+    assert_eq!(sandbox.gh_calls().len(), before, "status asked GitHub");
 }
 
 #[test]

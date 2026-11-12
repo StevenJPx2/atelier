@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A stand-in gh for atelier's CLI tests.
 
-It keeps issues and their labels in world.json beside it, answers the REST
+It keeps issues and their labels in world.json beside it, and each branch's
+pull request in pulls.json, answers the REST
 and GraphQL calls the github plugin makes with replies shaped as GitHub's
 captured ones (plugins/github/tests/github/fixtures), and records each call
 in calls.jsonl.
@@ -70,7 +71,10 @@ def main():
             path = arg
 
     if path == "graphql":
-        reply("200 OK", {"data": {"repository": {"pullRequests": {"nodes": []}}}})
+        pulls = HERE / "pulls.json"
+        found = json.loads(pulls.read_text()) if pulls.exists() else {}
+        nodes = [found[fields["branch"]]] if fields.get("branch") in found else []
+        reply("200 OK", {"data": {"repository": {"pullRequests": {"nodes": nodes}}}})
 
     url = urllib.parse.urlsplit(path)
     parts = url.path.split("/")

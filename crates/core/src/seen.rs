@@ -75,6 +75,16 @@ pub enum PullRequest {
     },
 }
 
+impl PullRequest {
+    /// The pull request's number on its forge.
+    #[must_use]
+    pub const fn number(self) -> u64 {
+        match self {
+            Self::Open { number, .. } | Self::Merged { number } | Self::Closed { number } => number,
+        }
+    }
+}
+
 /// What the current stage's plugin reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StageOutcome {

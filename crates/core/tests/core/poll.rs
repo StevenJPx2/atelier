@@ -235,6 +235,10 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     assert_eq!(phase(&state), Phase::Green { rounds: 1 });
     assert_eq!(state.issues[&key()].pull_request, Some(31));
 
+    world.pulls.borrow_mut().remove(&branch);
+    world.poll(&project, &mut state);
+    assert_eq!(state.issues[&key()].pull_request, Some(31));
+
     set(open_pull(1, Checks::Passed, false));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Ready { rounds: 1 });

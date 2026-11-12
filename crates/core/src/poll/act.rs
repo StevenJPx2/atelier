@@ -131,15 +131,19 @@ fn remember_pull_request<E>(
     state: &mut State,
     save: &mut impl FnMut(&State) -> Result<(), E>,
 ) -> Result<(), E> {
-    let number = observed.seen.pull_request.map(PullRequest::number);
+    let Some(number) = observed.seen.pull_request.map(PullRequest::number) else {
+        return Ok(());
+    };
+    let Some(record) = state.issues.get_mut(&observed.issue.key) else {
+        return Ok(());
+    };
 
-    match state.issues.get_mut(&observed.issue.key) {
-        Some(record) if number.is_some() && record.pull_request != number => {
-            record.pull_request = number;
-            save(state)
-        }
-        _ => Ok(()),
+    if record.pull_request == Some(number) {
+        return Ok(());
     }
+
+    record.pull_request = Some(number);
+    save(state)
 }
 
 const fn starting(phase: Phase) -> bool {

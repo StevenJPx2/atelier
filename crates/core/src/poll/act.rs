@@ -1,7 +1,7 @@
 use super::{Observation, Observed, Plugins, Project, Record, State};
 use crate::{
-    Action, Brief, Event, IssueKey, Phase, PluginError, Reason, Seen, Tracker, WorktreeRequest,
-    events, step,
+    Action, Brief, Event, IssueKey, Phase, PluginError, PullRequest, Reason, Seen, Tracker,
+    WorktreeRequest, events, step,
 };
 
 /// The most steps one issue takes in one poll. A start takes four and a
@@ -74,6 +74,8 @@ fn drive<E>(
     let key = &observed.issue.key;
     let mut seen = observed.seen;
 
+    remember_pull_request(observed, state, save)?;
+
     for _ in 0..MAX_STEPS {
         let record = state.issues.get(key);
         let phase = record.map_or(Phase::Untracked, |record| record.phase);
@@ -120,6 +122,24 @@ fn drive<E>(
     }
 
     Ok(Ok(()))
+}
+
+/// Keeps the number of the pull request the poll saw, so `status` shows it
+/// without asking the forge.
+fn remember_pull_request<E>(
+    observed: &Observed,
+    state: &mut State,
+    save: &mut impl FnMut(&State) -> Result<(), E>,
+) -> Result<(), E> {
+    let number = observed.seen.pull_request.map(PullRequest::number);
+
+    match state.issues.get_mut(&observed.issue.key) {
+        Some(record) if number.is_some() && record.pull_request != number => {
+            record.pull_request = number;
+            save(state)
+        }
+        _ => Ok(()),
+    }
 }
 
 const fn starting(phase: Phase) -> bool {

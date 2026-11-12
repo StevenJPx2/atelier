@@ -18,6 +18,18 @@ brew services start atelier
 atelier status
 ```
 
+```text
+StevenJPx2/chauffeur  /Users/me/Documents/Projects/chauffeur
+  base        v2                       set
+  ...
+  github#6    Open { rounds: 1 }       issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
+  github#12   Building                 issue-12-fix-the-dead-link  ses_…  -
+```
+
+Each issue shows its phase, branch, session and pull request (`-` when it
+has none). `status` reads only `state.json`: the pull request's number is
+the one the daemon's last poll saw, so it makes no GitHub call.
+
 ```mermaid
 flowchart LR
     Main["main.rs<br/>supervisor"] -- "one thread each" --> P1["poll: chauffeur"]

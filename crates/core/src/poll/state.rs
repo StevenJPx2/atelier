@@ -20,6 +20,8 @@ pub struct Record {
     pub branch: String,
     pub worktree: Option<PathBuf>,
     pub session: Option<Session>,
+    /// The number of the pull request on its branch, once a poll saw one.
+    pub pull_request: Option<u64>,
     pub pending: Vec<Action>,
 }
 
@@ -36,6 +38,7 @@ impl Record {
             branch: branch(key, title),
             worktree: None,
             session: None,
+            pull_request: None,
             pending: Vec::new(),
         }
     }

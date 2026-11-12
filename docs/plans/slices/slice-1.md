@@ -371,6 +371,7 @@ pub struct Record {
     pub branch: String,
     pub worktree: Option<PathBuf>,
     pub session: Option<Session>,
+    pub pull_request: Option<u64>,
     pub pending: Vec<Action>,
 }
 
@@ -784,8 +785,13 @@ atelier status
 #   agent       the only one             found
 #   red_rounds  5                        found
 #   poll        30 s                     found
-#   github#12   Building                 issue-12-fix-the-dead-link  ses_…
+#   github#6    Open { rounds: 1 }       issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
+#   github#12   Building                 issue-12-fix-the-dead-link  ses_…  -
 ```
+
+Each issue's line shows its phase, branch, session and pull request, or `-`
+for none. The pull request's number is the one the daemon's last poll saw,
+kept in `state.json`, so `status` asks no forge.
 
 #### Structure
 

@@ -228,9 +228,12 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     let branch = state.issues[&key()].branch.clone();
     let set = |pull| world.pulls.borrow_mut().insert(branch.clone(), pull);
 
+    assert_eq!(state.issues[&key()].pull_request, None);
+
     set(open_pull(1, Checks::Passed, true));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Green { rounds: 1 });
+    assert_eq!(state.issues[&key()].pull_request, Some(31));
 
     set(open_pull(1, Checks::Passed, false));
     world.poll(&project, &mut state);
@@ -240,8 +243,9 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Open { rounds: 1 });
 
-    set(PullRequest::Merged { number: 31 });
+    set(PullRequest::Merged { number: 32 });
     world.poll(&project, &mut state);
+    assert_eq!(state.issues[&key()].pull_request, Some(32));
 
     let ticket = world.ticket("12");
     assert_eq!(phase(&state), Phase::Done);

@@ -1,8 +1,9 @@
 #!/bin/sh
 # A stand-in opencode for atelier's CLI tests: replies are what OpenCode
-# v2.2.7 printed (plugins/opencode/tests/opencode/fixtures). Beside it, a
-# file named refuse makes every new session fail as a 4xx does, and gone
-# answers as if the session were deleted.
+# v2.2.7 printed (plugins/opencode/tests/opencode/fixtures). It remembers
+# the session it made, and whether that session was briefed. Beside it, a
+# file named refuse makes every new session fail as a 4xx does, slow makes
+# a brief take ten seconds, and gone answers as if the session were deleted.
 here=$(dirname "$0")
 printf '%s\n' "$*" >> "$here/opencode-calls.log"
 fixtures="$here/opencode-fixtures"
@@ -14,15 +15,30 @@ gone() {
 }
 
 case "$2 $3" in
+  "get /api/session?directory="*)
+    if [ -f "$here/made" ]; then
+      cat "$fixtures/session-list-one.json"
+    else
+      cat "$fixtures/session-list-empty.json"
+    fi ;;
+  "get /api/session/"*/message)
+    if [ -f "$here/briefed" ]; then
+      cat "$fixtures/messages-prompted.json"
+    else
+      cat "$fixtures/messages-empty.json"
+    fi ;;
   "post /api/session")
     if [ -f "$here/refuse" ]; then
       cat "$fixtures/session-not-found.json"
       echo "HTTP 400 Bad Request" >&2
       exit 1
     fi
+    touch "$here/made"
     cat "$fixtures/session-created.json" ;;
   "post "*/prompt)
     [ -f "$here/gone" ] && gone
+    [ -f "$here/slow" ] && sleep 10
+    touch "$here/briefed"
     echo '{"data":{}}' ;;
   "post "*/interrupt)
     [ -f "$here/gone" ] && gone

@@ -106,7 +106,7 @@ fn a_real_session_refuses_a_push_to_another_branch_and_a_merge() {
     let before = git(&origin, &["rev-parse", "main"]);
     let opencode = OpenCode::new();
 
-    let session = opencode.start(&worktree, &brief()).unwrap();
+    let session = opencode.start(&worktree, &brief(), None).unwrap();
 
     let started = Instant::now();
     while git(&origin, &["branch", "--list", "issue-1-live"]).is_empty()

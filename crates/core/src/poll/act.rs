@@ -274,7 +274,8 @@ fn build(
             )
             .deny(plugins.forge.denied());
 
-            record.session = Some(plugins.agent.start(&worktree, &brief)?);
+            let replacing = record.session.as_ref();
+            record.session = Some(plugins.agent.start(&worktree, &brief, replacing)?);
         }
         (Action::StartBuilder, None) => {
             return Err(PluginError::permanent("the builder has no worktree"));

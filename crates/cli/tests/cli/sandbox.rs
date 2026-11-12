@@ -161,6 +161,10 @@ impl Sandbox {
             "session-created.json",
             "interrupted-idle.json",
             "session-not-found.json",
+            "session-list-empty.json",
+            "session-list-one.json",
+            "messages-empty.json",
+            "messages-prompted.json",
         ] {
             fs::copy(captured.join(name), opencode.join(name)).unwrap();
         }

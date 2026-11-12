@@ -88,12 +88,20 @@ pub struct CiFile {
 /// The coding agent builders run in.
 pub trait Agent {
     /// Starts a session in `worktree` working on `brief`, returning once the
-    /// agent has accepted it.
+    /// agent has accepted it. Starting again continues a session an earlier
+    /// start made but never returned, so a stop in the middle of a start
+    /// leaves one builder; `replacing`, the issue's last builder, is never
+    /// continued.
     ///
     /// # Errors
     ///
     /// The agent's failure.
-    fn start(&self, worktree: &Path, brief: &Brief) -> Result<Session, PluginError>;
+    fn start(
+        &self,
+        worktree: &Path,
+        brief: &Brief,
+        replacing: Option<&Session>,
+    ) -> Result<Session, PluginError>;
 
     /// Stops the session's turn; interrupting an idle session succeeds.
     ///

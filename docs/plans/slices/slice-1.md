@@ -778,8 +778,10 @@ opencode.interrupt(&session)?;
 
 `OpenCode` runs `opencode` from `PATH`, which talks to its running server,
 or another program in tests. It registers as the agent `opencode`. `start`
-deletes a session whose prompt fails. Each call has a 30-second deadline; a
-4xx is permanent, anything else transient.
+deletes a session whose prompt fails. Interrupting or telling a session that
+is gone (404) succeeds, since no builder is left to stop or tell. Each call
+has a 30-second deadline; any other 4xx is permanent, anything else
+transient.
 
 ```rust
 pub struct OpenCode {
@@ -816,9 +818,8 @@ pub fn rules(brief: &Brief) -> Vec<Rule>;
 
 A stand-in `opencode` replays what OpenCode v2.2.7 printed: a builder starts
 as a session in its worktree with its rules, then gets its brief; a session
-whose prompt fails is deleted; telling a session prompts it, and a missing one
-fails for good; interrupting an idle session succeeds and a missing one fails
-for good; a reply that is not a session is refused; it is
+whose prompt fails is deleted; telling or interrupting a session succeeds,
+and so does one that is gone; a reply that is not a session is refused; it is
 the build's agent under its name.
 
 Once against the real OpenCode, on demand, since it starts a model turn: a

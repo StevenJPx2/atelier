@@ -25,6 +25,31 @@ impl OpenCode {
         path: &str,
         body: Option<&str>,
     ) -> Result<String, PluginError> {
+        match self.request(method, path, body)? {
+            Answer::Reply(reply) => Ok(reply),
+            Answer::Missing(error) => Err(error),
+        }
+    }
+
+    /// The same, except that something the server no longer has, such as a
+    /// deleted session, answers none.
+    ///
+    /// # Errors
+    ///
+    /// As `api`, for every other failure.
+    pub(crate) fn api_if_there(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> Result<Option<String>, PluginError> {
+        match self.request(method, path, body)? {
+            Answer::Reply(reply) => Ok(Some(reply)),
+            Answer::Missing(_) => Ok(None),
+        }
+    }
+
+    fn request(&self, method: &str, path: &str, body: Option<&str>) -> Result<Answer, PluginError> {
         let mut command = Command::new(&self.program);
         command.args(["api", method, path]);
 
@@ -35,7 +60,7 @@ impl OpenCode {
         let output = atelier_command::run(command, DEADLINE)?;
 
         if output.success {
-            return Ok(output.stdout);
+            return Ok(Answer::Reply(output.stdout));
         }
 
         let detail = serde_json::from_str::<serde_json::Value>(&output.stdout)
@@ -49,9 +74,21 @@ impl OpenCode {
             Failure::Transient
         };
 
-        Err(PluginError {
+        let error = PluginError {
             failure,
             message: format!("opencode api {method} {path}: {detail}"),
-        })
+        };
+
+        if output.stderr.contains("HTTP 404") {
+            Ok(Answer::Missing(error))
+        } else {
+            Err(error)
+        }
     }
+}
+
+/// What the server answered: a reply, or that it has no such thing.
+enum Answer {
+    Reply(String),
+    Missing(PluginError),
 }

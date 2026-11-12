@@ -1,0 +1,17 @@
+# atelier checks itself: its gates, listed in .atelier/config.toml, each its
+# own check, through gates.yml from this tree and atelier built from source.
+name: atelier
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    uses: ./.github/workflows/gates.yml
+    with:
+      atelier: source

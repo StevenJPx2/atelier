@@ -10,11 +10,11 @@ flowchart LR
     Gates --> Languages["3–5: Language plugins<br/>planned"]
 ```
 
-| Slice                                   | Status                    | Plan                                                                  |
-| --------------------------------------- | ------------------------- | --------------------------------------------------------------------- |
-| 0: Install and run atelier              | Implemented, `0.1.0-rc.2` | [Setup](slices/slice-0.md)                                            |
-| 1: A label becomes a ready pull request | Implemented, `0.1.0-rc.6` | [The loop](slices/slice-1.md)                                         |
-| 2: Run project gates in forge CI        | Planned                   | [Gates](https://github.com/StevenJPx2/atelier/issues/1#slice-2-gates) |
+| Slice                                   | Status                    | Plan                          |
+| --------------------------------------- | ------------------------- | ----------------------------- |
+| 0: Install and run atelier              | Implemented, `0.1.0-rc.2` | [Setup](slices/slice-0.md)    |
+| 1: A label becomes a ready pull request | Implemented, `0.1.0-rc.6` | [The loop](slices/slice-1.md) |
+| 2: Run a project's gates                | Planned                   | [Gates](slices/slice-2.md)    |
 
 The [architecture and ordered slice list](https://github.com/StevenJPx2/atelier/issues/1)
 are the approved contract. [GitHub](https://github.com/StevenJPx2/atelier/issues/6)

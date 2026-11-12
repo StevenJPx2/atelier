@@ -195,10 +195,10 @@ impl Marks {
     pub const fn without(self, mark: Mark) -> Self;
 }
 
-pub enum Checks { Pending, Passed, Failed }
+pub enum Rollup { Pending, Passed, Failed }
 
 pub enum PullRequest {
-    Open { number: u64, draft: bool, failed_rounds: u8, checks: Checks },
+    Open { number: u64, draft: bool, failed_rounds: u8, checks: Rollup },
     Merged { number: u64 },
     Closed { number: u64 },
 }

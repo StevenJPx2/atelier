@@ -1,6 +1,6 @@
 //! GitHub pull requests as atelier's forge.
 
-use atelier_core::{Checks, Forge, PluginError, PullRequest, Repo};
+use atelier_core::{Forge, PluginError, PullRequest, Repo, Rollup};
 use serde::Deserialize;
 
 use crate::GitHub;
@@ -57,15 +57,15 @@ struct CommitNode {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Commit {
-    status_check_rollup: Option<Rollup>,
+    status_check_rollup: Option<RollupReply>,
 }
 
 #[derive(Deserialize)]
-struct Rollup {
+struct RollupReply {
     state: String,
 }
 
-fn failed(rollup: Option<&Rollup>) -> bool {
+fn failed(rollup: Option<&RollupReply>) -> bool {
     rollup.is_some_and(|rollup| matches!(rollup.state.as_str(), "FAILURE" | "ERROR"))
 }
 
@@ -79,7 +79,7 @@ impl Pull {
             "MERGED" => PullRequest::Merged { number },
             "CLOSED" => PullRequest::Closed { number },
             _ => {
-                let rollups: Vec<Option<&Rollup>> = self
+                let rollups: Vec<Option<&RollupReply>> = self
                     .commits
                     .nodes
                     .iter()
@@ -90,9 +90,9 @@ impl Pull {
                 let head = rollups.last().copied().flatten();
 
                 let checks = match head.map(|rollup| rollup.state.as_str()) {
-                    Some("SUCCESS") => Checks::Passed,
-                    Some("FAILURE" | "ERROR") => Checks::Failed,
-                    _ => Checks::Pending,
+                    Some("SUCCESS") => Rollup::Passed,
+                    Some("FAILURE" | "ERROR") => Rollup::Failed,
+                    _ => Rollup::Pending,
                 };
 
                 PullRequest::Open {
@@ -180,7 +180,7 @@ mod tests {
         serde_json::from_str::<Pull>(&json).unwrap().pull_request()
     }
 
-    const fn open(failed_rounds: u8, checks: Checks) -> PullRequest {
+    const fn open(failed_rounds: u8, checks: Rollup) -> PullRequest {
         PullRequest::Open {
             number: 3,
             draft: false,
@@ -198,18 +198,18 @@ mod tests {
             ),
             (
                 pull("OPEN", &[Some("SUCCESS"), Some("FAILURE")]),
-                open(1, Checks::Failed),
+                open(1, Rollup::Failed),
             ),
             (
                 pull("OPEN", &[Some("ERROR"), Some("ERROR")]),
-                open(2, Checks::Failed),
+                open(2, Rollup::Failed),
             ),
             (
                 pull("OPEN", &[Some("FAILURE"), None]),
-                open(1, Checks::Pending),
+                open(1, Rollup::Pending),
             ),
-            (pull("OPEN", &[Some("EXPECTED")]), open(0, Checks::Pending)),
-            (pull("OPEN", &[]), open(0, Checks::Pending)),
+            (pull("OPEN", &[Some("EXPECTED")]), open(0, Rollup::Pending)),
+            (pull("OPEN", &[]), open(0, Rollup::Pending)),
         ];
 
         for (found, expected) in cases {

@@ -2,7 +2,7 @@
 
 use crate::world::{self, World};
 use atelier_core::{
-    Action, Checks, Failure, Filter, IssueKey, Mark, Marks, Phase, PullRequest, Reason, Record,
+    Action, Failure, Filter, IssueKey, Mark, Marks, Phase, PullRequest, Reason, Record, Rollup,
     State, act, observe,
 };
 
@@ -27,7 +27,7 @@ fn building() -> (World, State) {
     (world, state)
 }
 
-const fn open_pull(failed_rounds: u8, checks: Checks, draft: bool) -> PullRequest {
+const fn open_pull(failed_rounds: u8, checks: Rollup, draft: bool) -> PullRequest {
     PullRequest::Open {
         number: 31,
         draft,
@@ -227,7 +227,7 @@ fn failed_rounds_up_to_the_limit_block_the_issue() {
         world
             .pulls
             .borrow_mut()
-            .insert(branch.clone(), open_pull(failed, Checks::Failed, true));
+            .insert(branch.clone(), open_pull(failed, Rollup::Failed, true));
         world.poll(&project, &mut state);
         assert_eq!(phase(&state), expected, "{failed} failed rounds");
     }
@@ -247,7 +247,7 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
 
     assert_eq!(state.issues[&key()].pull_request, None);
 
-    set(open_pull(1, Checks::Passed, true));
+    set(open_pull(1, Rollup::Passed, true));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Green { rounds: 1 });
     assert_eq!(state.issues[&key()].pull_request, Some(31));
@@ -261,11 +261,11 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     world.poll(&project, &mut state);
     assert_eq!(state.issues[&key()].pull_request, Some(31));
 
-    set(open_pull(1, Checks::Passed, false));
+    set(open_pull(1, Rollup::Passed, false));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Ready { rounds: 1 });
 
-    set(open_pull(1, Checks::Pending, false));
+    set(open_pull(1, Rollup::Pending, false));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Open { rounds: 1 });
     assert_eq!(
@@ -274,7 +274,7 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
         "told again without a new green"
     );
 
-    set(open_pull(1, Checks::Passed, true));
+    set(open_pull(1, Rollup::Passed, true));
     world.poll(&project, &mut state);
     assert_eq!(phase(&state), Phase::Green { rounds: 1 });
     assert_eq!(world.told.borrow().len(), 2, "a new green is told");
@@ -316,7 +316,7 @@ fn a_stage_with_no_plugin_holds_the_issue_and_reports_it() {
     world
         .pulls
         .borrow_mut()
-        .insert(branch, open_pull(0, Checks::Passed, true));
+        .insert(branch, open_pull(0, Rollup::Passed, true));
     let report = world.poll(&project, &mut state);
 
     assert_eq!(

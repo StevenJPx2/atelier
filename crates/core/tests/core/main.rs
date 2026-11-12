@@ -2,5 +2,6 @@
 //! plugin registry.
 
 mod poll;
+mod red_round;
 mod registry;
 mod world;

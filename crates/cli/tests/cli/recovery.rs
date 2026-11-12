@@ -71,3 +71,28 @@ fn a_clone_left_without_its_origin_is_repaired() {
         "https://github.com/StevenJPx2/demo.git"
     );
 }
+#[test]
+fn a_whole_clone_is_used_as_it_is() {
+    let sandbox = Sandbox::new(&labelled(&[]));
+    sandbox.config("poll = 15\n");
+    let asked = |sandbox: &Sandbox| {
+        sandbox
+            .gh_calls()
+            .iter()
+            .filter(|call| call[..2] == ["config", "get"])
+            .count()
+    };
+    let listings = |sandbox: &Sandbox| {
+        sandbox
+            .gh_calls()
+            .iter()
+            .filter(|call| call.get(2).is_some_and(|path| path.contains("/issues?")))
+            .count()
+    };
+
+    let daemon = sandbox.daemon();
+    sandbox.wait("two polls", |sandbox| listings(sandbox) >= 4);
+    drop(daemon);
+
+    assert_eq!(asked(&sandbox), 1, "{:?}", sandbox.gh_calls());
+}

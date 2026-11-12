@@ -75,7 +75,9 @@ doc tests, rustdoc, cargo-deny, an MSRV check, Python format and lint, and two
 native release builds with packaged smoke tests. Mutation testing covers the
 pull request's Rust diff.
 
-Files: `.github/workflows/check.yml` and `pyproject.toml`.
+Files: `pyproject.toml`; the checks run through `.atelier/config.toml` and
+`.github/workflows/atelier.yml`, as [slice 2](slice-2.md) builds them, and
+the packaged smoke tests in `.github/workflows/package.yml`.
 
 ```sh
 cargo nextest run --workspace --locked --no-tests=warn

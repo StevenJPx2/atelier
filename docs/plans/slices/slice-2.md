@@ -2,8 +2,8 @@
 
 **Status: In progress.** The checks role in core, the `commands` plugin,
 `atelier gates`, `check` and `fix`, the commit hook and GitHub's CI are
-built, and atelier lists its own gates. Next, atelier's gates run on a pull
-request through `atelier.yml`, and `check.yml` goes.
+built, and atelier checks itself with its own gates. Next come the release,
+the end-to-end runs and the recording.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is

@@ -41,4 +41,5 @@ opencode.interrupt(&session)?;
 - **A failed prompt** deletes the session, so no idle builder is left.
 - **Telling** prompts the session, and an idle one starts a turn: atelier
   wakes the builder this way when every check passed.
-- **Interrupting** an idle session succeeds.
+- **Interrupting** an idle session succeeds, and so does interrupting or
+  telling one that is gone: no builder is left to stop or tell.

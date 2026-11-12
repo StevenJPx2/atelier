@@ -47,9 +47,9 @@ impl Agent for OpenCode {
         })
     }
 
-    /// Interrupting an idle session succeeds.
+    /// Interrupting an idle session, or one that is gone, succeeds.
     fn interrupt(&self, session: &Session) -> Result<(), PluginError> {
-        self.api(
+        self.api_if_there(
             "post",
             &format!("/api/session/{}/interrupt", session.id),
             None,
@@ -57,11 +57,12 @@ impl Agent for OpenCode {
         Ok(())
     }
 
-    /// Prompts the session with `text`; an idle one starts a turn.
+    /// Prompts the session with `text`; an idle one starts a turn. Telling a
+    /// session that is gone succeeds: no builder is left to hear it.
     fn tell(&self, session: &Session, text: &str) -> Result<(), PluginError> {
         let prompt = json!({ "text": text }).to_string();
 
-        self.api(
+        self.api_if_there(
             "post",
             &format!("/api/session/{}/prompt", session.id),
             Some(&prompt),

@@ -1,10 +1,17 @@
 #!/bin/sh
 # A stand-in opencode for atelier's CLI tests: replies are what OpenCode
-# v2.2.7 printed (plugins/opencode/tests/opencode/fixtures). A file named
-# refuse beside it makes every new session fail as a 4xx does.
+# v2.2.7 printed (plugins/opencode/tests/opencode/fixtures). Beside it, a
+# file named refuse makes every new session fail as a 4xx does, and gone
+# answers as if the session were deleted.
 here=$(dirname "$0")
 printf '%s\n' "$*" >> "$here/opencode-calls.log"
 fixtures="$here/opencode-fixtures"
+
+gone() {
+  cat "$fixtures/session-not-found.json"
+  echo "HTTP 404 Not Found" >&2
+  exit 1
+}
 
 case "$2 $3" in
   "post /api/session")
@@ -14,7 +21,11 @@ case "$2 $3" in
       exit 1
     fi
     cat "$fixtures/session-created.json" ;;
-  "post "*/prompt) echo '{"data":{}}' ;;
-  "post "*/interrupt) cat "$fixtures/interrupted-idle.json" ;;
+  "post "*/prompt)
+    [ -f "$here/gone" ] && gone
+    echo '{"data":{}}' ;;
+  "post "*/interrupt)
+    [ -f "$here/gone" ] && gone
+    cat "$fixtures/interrupted-idle.json" ;;
   *) echo '{}' ;;
 esac

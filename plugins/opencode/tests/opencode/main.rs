@@ -218,7 +218,7 @@ fn a_session_whose_prompt_fails_is_deleted() {
 }
 
 #[test]
-fn interrupting_succeeds_on_an_idle_session_and_fails_for_good_on_a_missing_one() {
+fn interrupting_succeeds_on_an_idle_session_and_on_one_that_is_gone() {
     let oc = StandIn::new(&[
         Reply::Ok("interrupted-idle.json"),
         Reply::Failed {
@@ -237,23 +237,18 @@ fn interrupting_succeeds_on_an_idle_session_and_fails_for_good_on_a_missing_one(
     };
 
     opencode.interrupt(&idle).unwrap();
-    let error = opencode.interrupt(&gone).unwrap_err();
+    opencode.interrupt(&gone).unwrap();
 
+    let calls = oc.calls();
     assert_eq!(
-        oc.calls()[0],
+        calls[0],
         ["api", "post", &format!("/api/session/{CREATED}/interrupt")]
     );
-    assert!(error.is_permanent());
-    assert!(
-        error
-            .message
-            .contains("Session not found: ses_doesnotexist"),
-        "{error}"
-    );
+    assert_eq!(calls.len(), 2);
 }
 
 #[test]
-fn telling_prompts_the_session_and_fails_for_good_on_a_missing_one() {
+fn telling_prompts_the_session_and_succeeds_on_one_that_is_gone() {
     let oc = StandIn::new(&[
         Reply::Ok("prompt-accepted.json"),
         Reply::Failed {
@@ -272,7 +267,7 @@ fn telling_prompts_the_session_and_fails_for_good_on_a_missing_one() {
     };
 
     opencode.tell(&builder, "Every check passed.").unwrap();
-    let error = opencode.tell(&gone, "Every check passed.").unwrap_err();
+    opencode.tell(&gone, "Every check passed.").unwrap();
 
     let calls = oc.calls();
     assert_eq!(
@@ -283,13 +278,7 @@ fn telling_prompts_the_session_and_fails_for_good_on_a_missing_one() {
         body(&calls[0]),
         serde_json::json!({ "text": "Every check passed." })
     );
-    assert!(error.is_permanent());
-    assert!(
-        error
-            .message
-            .contains("Session not found: ses_doesnotexist"),
-        "{error}"
-    );
+    assert_eq!(calls.len(), 2);
 }
 
 #[test]

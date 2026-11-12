@@ -284,8 +284,13 @@ impl Sandbox {
 
     /// Sets issue `id`'s labels on the stand-in GitHub, as a person would.
     pub fn set_labels(&self, id: &str, labels: &[&str]) {
+        self.set(id, "labels", serde_json::json!(labels));
+    }
+
+    /// Sets a field of issue `id` on the stand-in GitHub, such as its state.
+    pub fn set(&self, id: &str, field: &str, value: Value) {
         let mut world = self.world();
-        world["issues"][id]["labels"] = serde_json::json!(labels);
+        world["issues"][id][field] = value;
         let temporary = self.bin.join("world.json.tmp");
         fs::write(&temporary, world.to_string()).unwrap();
         fs::rename(temporary, self.bin.join("world.json")).unwrap();

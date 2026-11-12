@@ -21,7 +21,9 @@
 //! # Ok::<(), atelier_core::PluginError>(())
 //! ```
 
+mod checkout;
 mod command;
 mod worktree;
 
+pub use checkout::Checkout;
 pub use worktree::Git;

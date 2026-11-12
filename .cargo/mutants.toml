@@ -4,10 +4,12 @@ test_tool = "nextest"
 # Kani harnesses run under cargo kani, not nextest.
 exclude_globs = ["**/proofs.rs"]
 exclude_re = [
-  # Not covered by a Rust test: main only hands clap's version and help to the
-  # terminal. The packaged smoke run in check.yml and release.yml executes the
-  # real binary instead. The CLI's daemon gives main behavior and removes this.
-  'crates/cli/src/main\.rs:\d+:\d+: replace main -> std::io::Result<ExitCode> with Ok\(Default::default\(\)\)',
   # Built only under cfg(kani), for the proofs; cargo kani checks it.
   'crates/core/src/machine/pipeline\.rs:\d+:\d+: replace Pipeline::unnamed',
+  # Equivalent: when the base is the default branch, reading its config again
+  # reads the same file the first read did.
+  'crates/cli/src/config\.rs:\d+:\d+: replace match guard base != default with true in resolve',
+  # Equivalent: a wait that has run exactly its time, to the nanosecond, is
+  # not something a test can arrange or a person can notice.
+  'crates/cli/src/daemon/poll\.rs:\d+:\d+: replace < with <= in sleep',
 ]

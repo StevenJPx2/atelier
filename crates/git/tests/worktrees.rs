@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{Repo, WorktreeRequest, Worktrees};
-use atelier_git::Git;
+use atelier_git::{Checkout, Git};
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
@@ -227,4 +227,56 @@ fn a_repository_name_that_could_leave_the_root_is_refused() {
     }
 
     assert!(!fixture.scratch.0.join("worktrees").exists());
+}
+
+#[test]
+fn a_checkout_reads_its_origin_its_default_branch_and_files_there() {
+    let fixture = Fixture::new();
+    run(&fixture.seed, &["switch", "--quiet", "--create", "main"]);
+    std::fs::create_dir_all(fixture.seed.join(".atelier")).unwrap();
+    std::fs::write(fixture.seed.join(".atelier/config.toml"), "base = \"v2\"\n").unwrap();
+    run(&fixture.seed, &["add", ".atelier/config.toml"]);
+    run(&fixture.seed, &["commit", "--quiet", "-m", "config"]);
+    run(&fixture.seed, &["push", "--quiet", "origin", "main"]);
+    let checkout = Checkout::new(&fixture.checkout);
+
+    let origin = checkout.origin().unwrap();
+    let default = checkout.default_branch().unwrap();
+    checkout.fetch("main").unwrap();
+    let config = checkout.show("main", ".atelier/config.toml").unwrap();
+    let missing = checkout.show("v2", ".atelier/config.toml").unwrap();
+    let unknown = checkout.show("nope", ".atelier/config.toml").unwrap_err();
+    let unfetchable = checkout.fetch("nope").unwrap_err();
+
+    assert!(origin.ends_with("origin.git"), "{origin}");
+
+    let local = fixture.scratch.0.join("origin.git");
+    let insteadof = format!("url.{}.insteadOf", local.display());
+    run(
+        &fixture.checkout,
+        &[
+            "config",
+            &insteadof,
+            "https://github.com/StevenJPx2/chauffeur.git",
+        ],
+    );
+    run(
+        &fixture.checkout,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/StevenJPx2/chauffeur.git",
+        ],
+    );
+    assert_eq!(
+        checkout.origin().unwrap(),
+        "https://github.com/StevenJPx2/chauffeur.git"
+    );
+    assert_eq!(checkout.default_branch().unwrap(), "main");
+    assert_eq!(default, "main");
+    assert_eq!(config.as_deref(), Some("base = \"v2\"\n"));
+    assert_eq!(missing, None);
+    assert!(unknown.is_permanent());
+    assert!(!unfetchable.is_permanent());
 }

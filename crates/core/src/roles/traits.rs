@@ -71,6 +71,18 @@ pub trait Forge {
 
     /// Commands the builder may never run, as shell patterns.
     fn denied(&self) -> Vec<String>;
+
+    /// The files that make the forge's CI run a project's gates with the
+    /// atelier `release`, built from `commit`, on pull requests and on
+    /// pushes to `base`.
+    fn ci(&self, release: &str, commit: &str, base: &str) -> Vec<CiFile>;
+}
+
+/// A file of the forge's CI, by its path from the top of the project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CiFile {
+    pub path: String,
+    pub text: String,
 }
 
 /// The coding agent builders run in.

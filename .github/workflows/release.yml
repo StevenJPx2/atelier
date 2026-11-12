@@ -34,6 +34,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - run: rustup target add ${{ matrix.rust }}
       - run: cargo build --release --locked -p atelier-cli --target ${{ matrix.rust }}
+        env:
+          # atelier init pins the CI it writes to this commit.
+          ATELIER_COMMIT: ${{ github.sha }}
       - run: python scripts/release.py package --target ${{ matrix.target }} --binary target/${{ matrix.rust }}/release/atelier
       - run: python scripts/release.py smoke dist/atelier-*.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

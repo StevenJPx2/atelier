@@ -21,8 +21,8 @@ pub use poll::{
     Observation, Observed, Plugins, Project, Record, Report, Source, State, Step, act, observe,
 };
 pub use roles::{
-    Agent, Failure, Filter, Forge, Issue, IssueKey, Listing, PluginError, Repo, Session, Tracker,
-    WorktreeRequest, Worktrees,
+    Agent, CiFile, Failure, Filter, Forge, Issue, IssueKey, Listing, PluginError, Repo, Session,
+    Tracker, WorktreeRequest, Worktrees,
 };
 pub use seen::{Marks, PullRequest, Rollup, Seen, StageOutcome, events};
 pub use settings::{Setting, Settings, SettingsError};

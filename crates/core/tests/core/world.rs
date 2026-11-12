@@ -14,9 +14,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{
-    Agent, Brief, Failure, Filter, Forge, Issue, IssueKey, Listing, Mark, Marks, Observation,
-    Pipeline, PluginError, Plugins, Project, PullRequest, Repo, Report, Session, Source, State,
-    Tracker, WorktreeRequest, Worktrees, act, observe,
+    Agent, Brief, CiFile, Failure, Filter, Forge, Issue, IssueKey, Listing, Mark, Marks,
+    Observation, Pipeline, PluginError, Plugins, Project, PullRequest, Repo, Report, Session,
+    Source, State, Tracker, WorktreeRequest, Worktrees, act, observe,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +198,10 @@ impl Forge for World {
 
     fn denied(&self) -> Vec<String> {
         vec!["merge *".into()]
+    }
+
+    fn ci(&self, _: &str, _: &str, _: &str) -> Vec<CiFile> {
+        Vec::new()
     }
 }
 

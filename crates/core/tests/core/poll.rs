@@ -36,6 +36,23 @@ const fn open_pull(failed_rounds: u8, checks: Checks, draft: bool) -> PullReques
     }
 }
 
+/// The builder was interrupted once, then told `why` and to act on nothing
+/// later.
+fn stopped(world: &World, why: &str) {
+    let told = world.told.borrow();
+
+    assert_eq!(*world.interrupts.borrow(), ["ses_0"]);
+    assert!(
+        matches!(
+            told.as_slice(),
+            [(session, text)] if session == "ses_0"
+                && text.contains(why)
+                && text.contains("Take no further action")
+        ),
+        "{told:?}"
+    );
+}
+
 #[test]
 fn a_requested_issue_starts_one_builder_across_many_polls() {
     let (world, mut state) = building();
@@ -181,7 +198,7 @@ fn removing_the_working_mark_stops_the_builder() {
     world.poll(&world::project(&[]), &mut state);
 
     assert_eq!(phase(&state), Phase::Stopped);
-    assert_eq!(*world.interrupts.borrow(), ["ses_0"]);
+    stopped(&world, "lost its working mark or was closed");
 }
 
 #[test]
@@ -192,7 +209,7 @@ fn closing_the_issue_stops_the_builder_and_drops_the_working_mark() {
     world.poll(&world::project(&[]), &mut state);
 
     assert_eq!(phase(&state), Phase::Stopped);
-    assert_eq!(*world.interrupts.borrow(), ["ses_0"]);
+    stopped(&world, "lost its working mark or was closed");
     assert!(!world.ticket("12").marks.has(Mark::Working));
 }
 
@@ -218,7 +235,7 @@ fn failed_rounds_up_to_the_limit_block_the_issue() {
     let ticket = world.ticket("12");
     assert_eq!(ticket.marks, Marks::default().with(Mark::Blocked));
     assert!(ticket.comments.last().unwrap().contains("failed 3 rounds"));
-    assert_eq!(*world.interrupts.borrow(), ["ses_0"]);
+    stopped(&world, "CI failed 3 rounds");
 }
 
 #[test]
@@ -272,6 +289,7 @@ fn passing_checks_and_a_ready_pull_request_reach_ready_then_merge_closes_it() {
     assert!(!ticket.marks.has(Mark::Working));
     assert!(world.worktrees.borrow().is_empty());
     assert!(world.interrupts.borrow().is_empty());
+    assert_eq!(world.told.borrow().len(), 2, "a merge tells no stop");
 }
 
 #[test]
@@ -286,7 +304,7 @@ fn a_pull_request_closed_unmerged_blocks_the_issue() {
     world.poll(&world::project(&[]), &mut state);
 
     assert_eq!(phase(&state), Phase::Blocked(Reason::Closed));
-    assert_eq!(*world.interrupts.borrow(), ["ses_0"]);
+    stopped(&world, "closed without merging");
 }
 
 #[test]

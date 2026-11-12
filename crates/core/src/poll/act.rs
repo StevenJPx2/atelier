@@ -209,7 +209,10 @@ fn perform(
         }
         Action::Interrupt => {
             if let Some(session) = &record.session {
-                context.plugins.agent.interrupt(session)?;
+                let agent = context.plugins.agent;
+
+                agent.interrupt(session)?;
+                agent.tell(session, &stopped(record.phase, context.project))?;
             }
         }
         Action::TellGreen => {
@@ -296,6 +299,23 @@ fn tracker<'a>(plugins: &Plugins<'a>, key: &IssueKey) -> Result<&'a dyn Tracker,
                 key.tracker
             ))
         })
+}
+
+/// What an interrupted builder hears: why, and to act on nothing later,
+/// since its pull request's events still wake it.
+fn stopped(phase: Phase, project: &Project) -> String {
+    let why = match phase {
+        Phase::Blocked(reason) => blocked(reason, project),
+        _ => {
+            "atelier stopped the builder: the issue lost its working mark or was closed.".to_owned()
+        }
+    };
+
+    format!(
+        "{why} Take no further action on this issue: when a message arrives later, \
+         such as a failed check or a review, end your turn without acting. If the \
+         issue is requested again, a new session takes over."
+    )
 }
 
 fn blocked(reason: Reason, project: &Project) -> String {

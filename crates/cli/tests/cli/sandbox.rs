@@ -251,6 +251,15 @@ impl Sandbox {
         fs::rename(temporary, self.bin.join("pulls.json")).unwrap();
     }
 
+    /// Sets issue `id`'s labels on the stand-in GitHub, as a person would.
+    pub fn set_labels(&self, id: &str, labels: &[&str]) {
+        let mut world = self.world();
+        world["issues"][id]["labels"] = serde_json::json!(labels);
+        let temporary = self.bin.join("world.json.tmp");
+        fs::write(&temporary, world.to_string()).unwrap();
+        fs::rename(temporary, self.bin.join("world.json")).unwrap();
+    }
+
     pub fn world(&self) -> Value {
         serde_json::from_str(&fs::read_to_string(self.bin.join("world.json")).unwrap()).unwrap()
     }

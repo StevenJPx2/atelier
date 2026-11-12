@@ -15,4 +15,6 @@ on branch `$branch`, and push only to it.
   stop.
 - When atelier tells you every check passed: mark the pull request ready, comment on the issue,
   and keep answering reviews until the merge.
+- When atelier tells you it stopped you: take no further action, and end any
+  later turn without acting.
 - Never merge, tag, release, change the version, or push to another branch.

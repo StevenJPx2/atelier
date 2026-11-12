@@ -157,7 +157,9 @@ pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Acti
 `step` is one `match`. Every way out of a working phase removes the working
 mark; every way out after Starting, except a merge, interrupts the builder.
 Entering Green tells the builder so, since sourcefed suppresses passing
-checks and nothing else would wake it to mark the pull request ready.
+checks and nothing else would wake it to mark the pull request ready. An
+interrupt is followed by a message saying why, and to act on nothing later:
+sourcefed keeps waking the session with its pull request's events.
 Requesting a blocked issue again also removes its blocked mark. Blocking adds
 three actions: unmark working, mark blocked, and a comment saying why.
 
@@ -450,8 +452,8 @@ to 40 characters, and its worktree folder `issue-<id>`.
   builder across many polls; a stop after every save resumes to the same end;
   a transient failure retries and keeps the listing unconfirmed; a permanent
   start failure blocks; a blocked issue requested again keeps its branch; the
-  working mark removed or the issue closed stops the builder; failed rounds
-  block at the limit; passing checks tell the builder once per green, then
+  working mark removed or the issue closed stops the builder and tells it to
+  stand down; failed rounds block at the limit; passing checks tell the builder once per green, then
   ready and a merge close the issue and remove the worktree; a pull request closed unmerged blocks; an issue marked working that
   atelier never took is blocked; a finished issue is not read again.
 - **Mutation testing** over `crates/core`.
@@ -915,7 +917,8 @@ stand-ins for `gh` and `opencode` first on `PATH`, built from their captured
 replies; the `gh` stand-in keeps each issue's labels. A labelled issue gets
 one builder across polls and a restart, on its own branch, with one comment,
 and `status` shows it; `status` shows a builder's pull request without asking
-GitHub; passing checks wake the builder with one prompt; a second daemon refuses to start, naming the first;
+GitHub; passing checks wake the builder with one prompt; removing the working
+label interrupts the builder, then tells it to stand down; a second daemon refuses to start, naming the first;
 an issue assigned to someone else is left alone under your filter; a builder
 that cannot start blocks its issue; a plugin the build lacks fails that
 project by name; `init` makes the labels the project sets; `add` refuses

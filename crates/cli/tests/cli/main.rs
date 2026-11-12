@@ -126,6 +126,30 @@ fn passing_checks_wake_the_builder_to_mark_its_pull_request_ready() {
 }
 
 #[test]
+fn removing_the_working_label_interrupts_the_builder_and_tells_it_to_stand_down() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let daemon = sandbox.daemon();
+    sandbox.wait("a builder", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("building")
+    });
+
+    sandbox.set_labels("12", &[]);
+    sandbox.wait("the builder stopped", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("stopped")
+    });
+    drop(daemon);
+
+    let calls = sandbox.opencode_calls();
+    let interrupt = calls.iter().position(|call| call.contains("/interrupt"));
+    let told = calls.iter().rposition(|call| call.contains("/prompt "));
+    let (Some(interrupt), Some(told)) = (interrupt, told) else {
+        panic!("no interrupt, or no prompt: {calls:?}");
+    };
+    assert!(interrupt < told, "told before the interrupt: {calls:?}");
+    assert!(calls[told].contains("Take no further action"), "{calls:?}");
+}
+
+#[test]
 fn status_shows_the_pull_request_a_builder_opened() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     let daemon = sandbox.daemon();

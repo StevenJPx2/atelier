@@ -1,9 +1,8 @@
 # Slice 2: run a project's gates
 
-**Status: In progress.** The checks role in core, the `commands` plugin,
-`atelier gates`, `check` and `fix`, the commit hook and GitHub's CI are
-built, and atelier checks itself with its own gates. Next come the release,
-the end-to-end runs and the recording.
+**Status: Implemented, `0.1.0-rc.7`.** Every part is built and released,
+atelier checks itself with its own gates, and the [end-to-end runs](#end-to-end)
+on atelier and on a fixture repository pass.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -31,8 +30,9 @@ atelier gates
 # docs  commands/prettier
 
 atelier check
-# .     commands/clippy    pass    21 s
-# docs  commands/prettier  fail     2 s   plans/README.md: code style issues
+# docs  commands/prettier  fail     1.6 s
+#     [warn] plans/README.md
+#     [warn] Code style issues found in the above file. Run Prettier with --write to fix.
 ```
 
 ```mermaid
@@ -43,6 +43,21 @@ flowchart LR
     Matrix -- "atelier check --gate --root" --> Check["a check on the pull request<br/>commands/clippy (.)"]
     Plugins -- "fixes" --> Hook["each builder commit<br/>atelier fix --staged"]
 ```
+
+## Recording
+
+The installed `0.1.0-rc.7`, in a scratch clone of atelier: `atelier gates`
+lists its 14 gates. A table that is not formatted is added under `docs/`, so
+`atelier check` runs only the docs gate, which fails and prints why;
+`atelier fix` fixes the file and the check passes. Last, the fixture
+repository's pull request, whose CI is the workflow `atelier init` wrote,
+shows each gate as its own check.
+
+The terminal-control capture is 39.9 seconds, 1600 pixels wide and 156 KB
+as H.264; the GIF is 1200 pixels wide and 775 KB. Frames from its middle and
+end are inspected for private data.
+
+[![atelier gates lists the gates; check fails on an unformatted docs table and fix fixes it; the fixture's pull request shows each gate as its own check](../../media/slice-2.gif)](../../media/slice-2.mp4)
 
 ## What it builds
 
@@ -377,8 +392,9 @@ impl Build {
 Through the real binary, in a checkout whose gates are real shell commands:
 `gates` lists each root and its gates, and the matrix for a change under
 `docs` holds only the `docs` gate; `check` runs only the gates the changes
-touch, and a failing one exits 1 and prints its output; one gate by name runs, after its setup
-with `--setup`, with `ATELIER_BASE` set to `origin/main` or to `--diff`'s
+touch, and a failing one exits 1 and prints its output; one gate by name
+runs, after its setup with `--setup`, with `ATELIER_BASE` set to
+`origin/main` or to `--diff`'s
 base, and an unknown one is refused; `fix --staged` fixes a staged file and
 stages it again, and leaves a partly staged one as staged; a gate added on
 the branch is not run until it is on the base. `status` refuses an unbuilt
@@ -553,12 +569,19 @@ gate and root.
 
 ## End to end
 
-1. In atelier's checkout, `atelier gates` lists its gates, and
-   `atelier check` runs the ones its changes touch.
-2. A pull request to atelier shows one check per gate and root; a docs-only
-   pull request runs only the docs gate.
-3. A builder on a real atelier issue commits code the hook formats, so no
-   format gate fails; a gate it does fail reaches it through sourcefed, and
-   the next push passes.
-4. `atelier init` in a fixture repository writes `atelier.yml`, and its
-   pull request shows its gates as checks, run by the released atelier.
+Each run is real: atelier's own pull requests, an issue labelled with the
+owner's approval and followed by the Homebrew service, and a public fixture
+repository created for the check.
+
+| Run                                                                                                                  | What happens                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| atelier's checkout                                                                                                   | `atelier gates` lists the 14 gates of `.atelier/config.toml`; `atelier check` runs only the gates the changes touch.                                                                                                                                                                                                                                   |
+| [#35](https://github.com/StevenJPx2/atelier/pull/35), [#36](https://github.com/StevenJPx2/atelier/pull/36)           | #35 touches only `.github`, `docs` and `scripts`, and runs only their three gates. #36 touches the code and runs every gate, each as its own check, all passing.                                                                                                                                                                                       |
+| [atelier#37](https://github.com/StevenJPx2/atelier/issues/37) → [#38](https://github.com/StevenJPx2/atelier/pull/38) | The builder writes `pub   const   E2E_HOOK :   u8 = 1 ;` and its commit holds `pub const E2E_HOOK: u8 = 1;`: the hook formatted it. A table row it was asked to leave as written fails `commands/readmes (.)`, which reaches it through sourcefed; it fixes the row, every gate passes, and atelier tells it so, 12 seconds before it marks #38 ready. |
+| [atelier-fixture#1](https://github.com/StevenJPx2/atelier-fixture/pull/1)                                            | `atelier init` from the `0.1.0-rc.7` release writes `atelier.yml` pinned to the release's commit. Its pull request installs that release, its sum checked; `commands/todo (notes)` fails on a TODO beside a passing `commands/readme (.)`, then passes after the fix.                                                                                  |
+
+The first full run on `main` found a fault in the runs themselves: the
+command runner closed a tool's output after its first MiB, so kani, which
+prints more, was stopped on its next write, and the failure's reason was
+never kept. Each output is read to its end and its last MiB kept
+([#36](https://github.com/StevenJPx2/atelier/pull/36)).

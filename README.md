@@ -1,10 +1,11 @@
 # atelier
 
-**Status: slice 1 implemented, `0.1.0-rc.6`.** Install with
+**Status: slice 2 implemented, `0.1.0-rc.7`.** Install with
 `brew install StevenJPx2/taps/atelier`, then `atelier init`, `atelier add` and
 `brew services start atelier`: a labelled issue becomes a builder and a ready
-pull request. Gates, language plugins, the critic and recordings are the
-approved design below, planned for later slices. See the
+pull request, and a project's gates, listed as commands, run as one check each
+in GitHub's CI and fix each builder commit. Language plugins, the critic and
+recordings are the approved design below, planned for later slices. See the
 [slice index](docs/plans/README.md), or read every page as a site at
 [atelier-docs.stevenjpx2.workers.dev](https://atelier-docs.stevenjpx2.workers.dev).
 

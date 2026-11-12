@@ -2,7 +2,8 @@
 
 **Status: In progress.** The checks role in core, the `commands` plugin,
 `atelier gates`, `check` and `fix`, the commit hook and GitHub's CI are
-built. Next comes atelier checking itself.
+built, and atelier lists its own gates. Next, atelier's gates run on a pull
+request through `atelier.yml`, and `check.yml` goes.
 
 You can see every gate a project runs, run them yourself, and have GitHub run
 each as its own check on a pull request. Every commit a builder makes is
@@ -518,18 +519,37 @@ workflow runs for real on atelier's own pull requests and in the end to end.
 
 atelier lists its gates as commands. Its only checking workflow is
 `.github/workflows/atelier.yml`, which calls `gates.yml` from its own tree
-with `atelier: source`, so a pull request that changes the gates runs them
-as changed. The packaging smoke test on macOS and Linux checks the release,
-not the code, and runs in `package.yml`.
+with `atelier: source`, so a pull request that changes `gates.yml` runs it
+as changed. The gates themselves come from `main`'s config, as for any
+project. The packaging smoke test on macOS and Linux checks the release,
+not the code, and runs in `package.yml`. The site's build runs in
+`docs.yml`, which deploys it.
 
-- `.`: fmt, clippy, nextest, doc tests, rustdoc, deny, shear, mutants, msrv,
-  kani
-- `docs`: prettier
-- `scripts`: ruff
-- `.github`: actionlint
+```sh
+atelier gates
+# .        commands/clippy
+# .        commands/deny
+# …
+# .github  commands/actionlint
+# docs     commands/prettier
+# scripts  commands/ruff
+```
 
-Verified by a pull request to atelier showing one check per gate and root,
-and one that touches only `docs` running only `commands/prettier (docs)`.
+- `.`: clippy, deny, doctest, fmt, kani, msrv, mutants, nextest, readmes,
+  rustdoc, shear. Only `fmt` has a fix, so a builder's commit is
+  formatted without waiting on a build.
+- `docs`: prettier, with its fix.
+- `scripts`: ruff, with its fix.
+- `.github`: actionlint.
+
+Files: [`.atelier/config.toml`](../../../.atelier/config.toml),
+`.github/workflows/atelier.yml`, `.github/workflows/package.yml`.
+
+Verified with the real binary in a copy of atelier whose `main` holds the
+config: `gates` lists the 14 gates, and `fmt`, `readmes`, `prettier`,
+`ruff` and `actionlint` pass; a change under `docs` alone plans only
+`commands/prettier (docs)`. Then on a pull request to atelier, one check per
+gate and root.
 
 ## End to end
 

@@ -1,0 +1,64 @@
+# atelier's own gates, run by atelier: `atelier gates` lists them, CI runs
+# each as its own check, and builders' commits run the fixes.
+checks = ["commands"]
+
+[commands.fmt]
+run = "cargo fmt --all -- --check"
+fix = "cargo fmt --all"
+
+[commands.clippy]
+run = "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+
+[commands.nextest]
+setup = ["curl -LsSf https://get.nexte.st/0.9.151/linux | tar zxf - -C \"${CARGO_HOME:-$HOME/.cargo}/bin\""]
+run = "RUSTFLAGS='-D warnings' cargo nextest run --workspace --all-targets --all-features --locked"
+
+[commands.doctest]
+run = "RUSTFLAGS='-D warnings' cargo test --workspace --doc --all-features --locked"
+
+[commands.rustdoc]
+run = "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --locked"
+
+[commands.deny]
+setup = ["cargo install --locked cargo-deny@0.20.2"]
+run = "cargo deny check"
+
+[commands.shear]
+setup = ["cargo install --locked cargo-shear@1.14.0"]
+run = "cargo shear"
+
+[commands.mutants]
+setup = [
+  "curl -LsSf https://get.nexte.st/0.9.151/linux | tar zxf - -C \"${CARGO_HOME:-$HOME/.cargo}/bin\"",
+  "cargo install --locked cargo-mutants@27.1.0",
+]
+run = '''
+mkdir -p target
+git diff --no-ext-diff --no-textconv --no-color "$ATELIER_BASE" -- crates plugins > target/mutants.diff
+cargo mutants --in-diff target/mutants.diff --timeout 120
+'''
+
+[commands.msrv]
+setup = ["rustup toolchain install 1.96 --profile minimal"]
+run = "cargo +1.96 check --workspace --all-targets --all-features --locked"
+
+[commands.kani]
+setup = ["cargo install --locked kani-verifier --version 0.68.0", "cargo kani setup"]
+run = "cargo kani -p atelier-core"
+
+[commands.readmes]
+run = "npx --yes prettier@3.9.10 --check README.md crates/README.md scripts/README.md site/README.md"
+
+[commands.prettier]
+root = "docs"
+run = "npx --yes prettier@3.9.10 --check '**/*.md'"
+fix = "npx --yes prettier@3.9.10 --write '**/*.md'"
+
+[commands.ruff]
+root = "scripts"
+run = "pipx run ruff==0.17.4 format --check . && pipx run ruff==0.17.4 check ."
+fix = "pipx run ruff==0.17.4 format ."
+
+[commands.actionlint]
+root = ".github"
+run = "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"

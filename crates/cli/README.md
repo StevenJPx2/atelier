@@ -57,7 +57,7 @@ flowchart LR
 | `plugins.rs`       | The plugins in the build, and each project's choice of them          |
 | `state.rs`         | `state.json`, written whole and renamed into place                   |
 | `log.rs`           | One line per event, with a UTC time                                  |
-| `daemon/mod.rs`    | The supervisor: rereads `projects.toml` every 30 s                   |
+| `daemon/mod.rs`    | The supervisor: rereads `projects.toml` every 5 s                    |
 | `daemon/lock.rs`   | The lock that lets one daemon run, holding its process id            |
 | `daemon/poll.rs`   | One project's polls: interval, soon after acting, back-off           |
 | `daemon/writer.rs` | The one thread that writes `state.json`                              |

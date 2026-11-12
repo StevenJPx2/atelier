@@ -59,6 +59,32 @@ impl Settings {
         }
     }
 
+    /// The list of text at `key`; empty when unset.
+    ///
+    /// # Errors
+    ///
+    /// The key holds something else, or a list with something but text.
+    pub fn texts(&self, path: &str, key: &str) -> Result<Vec<&str>, SettingsError> {
+        let wrong = || SettingsError::new(path, key, "must be a list of text");
+
+        match self.0.get(key) {
+            None => Ok(Vec::new()),
+            Some(Setting::List(items)) => items
+                .iter()
+                .map(|item| match item {
+                    Setting::Text(text) => Ok(text.as_str()),
+                    _ => Err(wrong()),
+                })
+                .collect(),
+            Some(_) => Err(wrong()),
+        }
+    }
+
+    /// Each key and its value, in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Setting)> {
+        self.0.iter().map(|(key, value)| (key.as_str(), value))
+    }
+
     /// The table at `key`, if set.
     ///
     /// # Errors
@@ -135,5 +161,28 @@ mod tests {
             "labels: unknown; it takes filter, lables"
         );
         assert!(labels.only("labels", &["build", "working"]).is_ok());
+
+        let setup = Settings::default()
+            .with(
+                "setup",
+                Setting::List(vec![Setting::Text("a".into()), Setting::Text("b".into())]),
+            )
+            .with("mixed", Setting::List(vec![Setting::Number(1)]))
+            .with("one", Setting::Text("c".into()));
+
+        assert_eq!(setup.texts("x", "setup").unwrap(), ["a", "b"]);
+        assert_eq!(setup.texts("x", "unset").unwrap(), Vec::<&str>::new());
+        assert_eq!(
+            setup.texts("x", "mixed").unwrap_err().to_string(),
+            "x.mixed: must be a list of text"
+        );
+        assert_eq!(
+            setup.texts("x", "one").unwrap_err().to_string(),
+            "x.one: must be a list of text"
+        );
+        assert_eq!(
+            setup.iter().map(|(key, _)| key).collect::<Vec<_>>(),
+            ["mixed", "one", "setup"]
+        );
     }
 }

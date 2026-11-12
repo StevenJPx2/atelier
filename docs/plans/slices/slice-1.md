@@ -924,8 +924,9 @@ pub fn add(path: &Path, repo: &str) -> Result<()>;
 ```
 
 Each project's clone. `add` makes it, and removes it again when the
-repository cannot be reached; each poll makes it when it is missing, so a
-project added before has its clone from the next poll. The URL is GitHub's,
+repository cannot be reached; each poll makes it when it is missing or has
+no `origin`, so a project added before has its clone from the next poll, and
+one left between `git init` and `git remote add` is finished. The URL is GitHub's,
 over the protocol `gh` uses, as `gh repo clone` does: HTTPS unless set to
 SSH. `status` only reads it.
 

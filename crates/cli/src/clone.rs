@@ -17,7 +17,8 @@ pub fn of(paths: &Paths, repo: &str) -> Result<Repository> {
     Ok(Repository::under(&paths.clones(), &Repo(repo.to_owned()))?)
 }
 
-/// The project's clone, made from GitHub when it is missing.
+/// The project's clone, made from GitHub when it is missing or was left
+/// without its `origin`, such as by a stop between its two steps.
 ///
 /// # Errors
 ///
@@ -25,7 +26,7 @@ pub fn of(paths: &Paths, repo: &str) -> Result<Repository> {
 pub fn ensure(paths: &Paths, repo: &str) -> Result<Repository> {
     let local = of(paths, repo)?;
 
-    if !local.exists() {
+    if !local.exists() || local.origin().is_err() {
         let url = GitHub::new().clone_url(&Repo(repo.to_owned()))?;
         local.create(&url)?;
     }

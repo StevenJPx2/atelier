@@ -15,7 +15,7 @@
 //! # Ok::<(), atelier_core::PluginError>(())
 //! ```
 
-use std::io::Read;
+use std::io::{self, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -26,8 +26,9 @@ use atelier_core::PluginError;
 /// How often a running command is checked.
 const TICK: Duration = Duration::from_millis(20);
 
-/// The most output kept from one stream.
-const MAX_OUTPUT: u64 = 1 << 20;
+/// The most output kept from one stream: its end, where a tool says why it
+/// failed.
+const MAX_OUTPUT: usize = 1 << 20;
 
 /// What a finished command printed, and whether it succeeded.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,8 +38,9 @@ pub struct Output {
     pub stderr: String,
 }
 
-/// Runs `command` with no input, in its own process group, keeping at most
-/// 1 MiB of each output.
+/// Runs `command` with no input, in its own process group. Each output is
+/// read to its end, so a tool that prints a lot runs on, and its last 1 MiB
+/// is kept, with any bytes that are not UTF-8 replaced.
 ///
 /// # Errors
 ///
@@ -88,12 +90,33 @@ pub fn run(mut command: Command, deadline: Duration) -> Result<Output, PluginErr
     })
 }
 
-fn reader(stream: impl Read + Send + 'static) -> thread::JoinHandle<String> {
+/// Reads `stream` to its end, keeping its last `MAX_OUTPUT` bytes. Reading
+/// on, rather than closing the stream, keeps a tool that prints past the
+/// bound from being stopped by a closed pipe.
+fn reader(mut stream: impl Read + Send + 'static) -> thread::JoinHandle<String> {
     thread::spawn(move || {
-        let mut text = String::new();
-        let _ = stream.take(MAX_OUTPUT).read_to_string(&mut text);
-        text
+        let mut tail = Tail(Vec::new());
+        let _ = io::copy(&mut stream, &mut tail);
+
+        String::from_utf8_lossy(&tail.0).into_owned()
     })
+}
+
+/// A sink that keeps only the last `MAX_OUTPUT` bytes written to it.
+struct Tail(Vec<u8>);
+
+impl Write for Tail {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.extend_from_slice(bytes);
+        let over = self.0.len().saturating_sub(MAX_OUTPUT);
+        self.0.drain(..over);
+
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 fn collect(handle: thread::JoinHandle<String>) -> String {
@@ -130,6 +153,21 @@ mod tests {
         assert!(!output.success);
         assert_eq!(output.stdout.len(), 1 << 20);
         assert_eq!(output.stderr, "err\n");
+    }
+
+    #[test]
+    fn a_tool_writing_past_the_bound_runs_to_its_end_and_its_last_output_is_kept() {
+        let mut command = Command::new("sh");
+        command.args([
+            "-c",
+            "head -c 3000000 /dev/zero | tr '\\0' a; printf '\\377'; echo; echo last",
+        ]);
+
+        let output = run(command, Duration::from_secs(10)).unwrap();
+
+        assert!(output.success, "{}", output.stderr);
+        assert!(output.stdout.ends_with("a\u{fffd}\nlast\n"));
+        assert!(output.stdout.len() <= (1 << 20) + 2);
     }
 
     #[test]

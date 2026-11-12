@@ -187,6 +187,62 @@ fn fixes_follow_the_files_and_the_overrides() {
     );
 }
 
+/// Finds a root beside each `Cargo.toml`, and builds what its manifest
+/// says.
+struct Manifests;
+
+impl Checks for Manifests {
+    fn roots(&self, tree: &dyn Tree) -> Vec<Root> {
+        tree.files()
+            .iter()
+            .filter_map(|file| file.strip_suffix("Cargo.toml"))
+            .map(|dir| {
+                dir.strip_suffix('/')
+                    .map_or_else(|| Root(".".to_owned()), |dir| Root(dir.to_owned()))
+            })
+            .collect()
+    }
+
+    fn gates(&self, tree: &dyn Tree, root: &Root) -> Vec<Gate> {
+        let manifest = if root.0 == "." {
+            "Cargo.toml".to_owned()
+        } else {
+            format!("{}/Cargo.toml", root.0)
+        };
+
+        tree.read(&manifest)
+            .map(|text| Gate {
+                name: "build".into(),
+                setup: vec![],
+                run: format!("build {}", text.trim()),
+            })
+            .into_iter()
+            .collect()
+    }
+
+    fn fixes(&self, _: &dyn Tree, _: &Root) -> Vec<Fix> {
+        vec![]
+    }
+}
+
+#[test]
+fn a_plugin_finds_its_roots_and_reads_its_files_in_the_tree() {
+    let tree = MemoryTree::new([
+        ("Cargo.toml", "[workspace]"),
+        ("docs/README.md", "# Docs"),
+        ("tools/gen/Cargo.toml", "[package]\n"),
+    ]);
+
+    let planned = gates(&[("rust", &Manifests)], &tree, &Overrides::default(), None);
+
+    let runs: Vec<String> = planned
+        .iter()
+        .map(|gate| format!("{} {}", gate.root.0, gate.item.run))
+        .collect();
+    assert_eq!(runs, [". build [workspace]", "tools/gen build [package]"]);
+    assert_eq!(tree.read("docs/missing.md"), None);
+}
+
 struct Language;
 struct Named;
 

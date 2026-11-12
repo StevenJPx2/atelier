@@ -2,6 +2,7 @@
 //! their checks, through `gh` and the user's own sign-in.
 
 mod api;
+mod clone;
 mod forge;
 mod labels;
 mod tracker;

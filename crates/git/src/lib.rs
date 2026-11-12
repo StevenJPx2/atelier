@@ -22,6 +22,7 @@
 //! ```
 
 mod command;
+mod folder;
 mod repository;
 mod worktree;
 

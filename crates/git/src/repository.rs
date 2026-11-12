@@ -1,10 +1,12 @@
 //! What atelier reads of a project's local repository and its `origin`.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::PluginError;
+use atelier_core::{PluginError, Repo};
 
 use crate::command::{checked, git};
+use crate::folder;
 
 /// A project's local repository, bare or a checkout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,9 +19,61 @@ impl Repository {
         Self { path: path.into() }
     }
 
+    /// atelier's own clone of `repo`, at `<root>/<owner>/<name>.git`,
+    /// whether or not it is made yet.
+    ///
+    /// # Errors
+    ///
+    /// The repository is not `owner/name`, or a part could leave the root.
+    pub fn under(root: &Path, repo: &Repo) -> Result<Self, PluginError> {
+        let (owner, name) = folder::owner_and_name(repo)?;
+
+        Ok(Self::new(root.join(owner).join(format!("{name}.git"))))
+    }
+
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Whether a bare repository is here.
+    #[must_use]
+    pub fn exists(&self) -> bool {
+        self.path.join("HEAD").is_file()
+    }
+
+    /// Makes a bare repository here whose `origin` is `url`, or keeps the
+    /// one already here with that `origin`. It fetches nothing: each
+    /// branch is fetched when needed, into `origin/<branch>`, and its only
+    /// local branches are the issues'.
+    ///
+    /// # Errors
+    ///
+    /// The folder cannot be made, or holds a repository with another
+    /// `origin`.
+    pub fn create(&self, url: &str) -> Result<(), PluginError> {
+        if !self.exists() {
+            let parent = self.path.parent().unwrap_or(&self.path);
+            fs::create_dir_all(parent).map_err(|error| {
+                PluginError::permanent(format!("making {}: {error}", parent.display()))
+            })?;
+            let target = self.path.to_string_lossy();
+            checked(parent, &["init", "--quiet", "--bare", &target])?;
+        }
+
+        let origin = git(&self.path, &["config", "--get", "remote.origin.url"])?;
+
+        if !origin.success {
+            checked(&self.path, &["remote", "add", "origin", url])?;
+        } else if origin.stdout.trim() != url {
+            return Err(PluginError::permanent(format!(
+                "{} has origin {}, not {url}",
+                self.path.display(),
+                origin.stdout.trim()
+            )));
+        }
+
+        Ok(())
     }
 
     /// The URL of `origin` as configured, before git's own `insteadOf`

@@ -1,5 +1,6 @@
 //! Worktrees against real repositories: an `origin` bare repository with a
-//! `v2` branch, and a clone of it as the project's local repository.
+//! `v2` branch, and atelier's own bare clone of it, made as the daemon
+//! makes it.
 
 #![expect(
     clippy::unwrap_used,
@@ -46,8 +47,8 @@ fn run(dir: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
-/// `origin`, a seed clone that pushed `v2`, the project's local repository, and
-/// the worktrees' root.
+/// `origin`, a seed clone that pushed `v2`, atelier's clone, and the
+/// worktrees' root.
 struct Fixture {
     scratch: Scratch,
     local: PathBuf,
@@ -78,15 +79,16 @@ impl Fixture {
         run(&seed, &["switch", "--quiet", "--create", "v2"]);
         run(&seed, &["commit", "--quiet", "--allow-empty", "-m", "base"]);
         run(&seed, &["push", "--quiet", "origin", "v2"]);
-        run(
-            &root,
-            &["clone", "--quiet", "--branch", "v2", "origin.git", "local"],
-        );
+        let repo = Repo("StevenJPx2/chauffeur".into());
+        let local = Repository::under(&root.join("clones"), &repo).unwrap();
+        local
+            .create(&root.join("origin.git").to_string_lossy())
+            .unwrap();
 
         Self {
-            local: root.join("local"),
+            local: local.path().to_owned(),
             git: Git::new(root.join("worktrees")),
-            repo: Repo("StevenJPx2/chauffeur".into()),
+            repo,
             seed,
             scratch,
         }
@@ -133,14 +135,12 @@ fn a_new_branch_starts_from_the_base_on_origin_and_is_reused() {
 #[test]
 fn a_local_branch_keeps_its_commits() {
     let fixture = Fixture::new();
-    run(&fixture.local, &["branch", BRANCH]);
-    run(&fixture.local, &["switch", "--quiet", BRANCH]);
-    run(
+    run(&fixture.local, &["fetch", "--quiet", "origin", "v2"]);
+    let work = run(
         &fixture.local,
-        &["commit", "--quiet", "--allow-empty", "-m", "work"],
+        &["commit-tree", "origin/v2:", "-p", "origin/v2", "-m", "work"],
     );
-    let work = run(&fixture.local, &["rev-parse", "HEAD"]);
-    run(&fixture.local, &["switch", "--quiet", "v2"]);
+    run(&fixture.local, &["branch", BRANCH, &work]);
 
     let tree = fixture.git.create(&fixture.request(BRANCH)).unwrap();
 
@@ -201,6 +201,62 @@ fn removing_drops_the_worktree_and_its_changes_but_keeps_the_branch() {
 }
 
 #[test]
+fn a_clone_is_bare_with_its_origin_and_no_branch_and_another_origin_is_refused() {
+    let fixture = Fixture::new();
+    let local = Repository::new(&fixture.local);
+    let origin = fixture.scratch.0.join("origin.git");
+
+    local.create(&origin.to_string_lossy()).unwrap();
+    let other = local.create("https://github.com/StevenJPx2/other.git");
+    local.fetch("v2").unwrap();
+
+    assert_eq!(
+        fixture.local,
+        fixture.scratch.0.join("clones/StevenJPx2/chauffeur.git")
+    );
+    assert!(local.exists());
+    assert_eq!(
+        run(&fixture.local, &["rev-parse", "--is-bare-repository"]),
+        "true"
+    );
+    assert_eq!(local.origin().unwrap(), origin.to_string_lossy());
+    assert_eq!(
+        run(&fixture.local, &["for-each-ref", "--format=%(refname)"]),
+        "refs/remotes/origin/v2"
+    );
+    let error = other.unwrap_err();
+    assert!(error.is_permanent());
+    assert!(error.message.contains("has origin"), "{error}");
+}
+
+#[test]
+fn a_worktree_made_from_your_checkout_is_removed_too() {
+    let fixture = Fixture::new();
+    let root = &fixture.scratch.0;
+    run(root, &["clone", "--quiet", "origin.git", "checkout"]);
+    let checkout = root.join("checkout");
+    let tree = fixture.expected();
+    let target = tree.to_string_lossy();
+    run(
+        &checkout,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            BRANCH,
+            &target,
+            "origin/v2",
+        ],
+    );
+
+    fixture.git.remove(&fixture.local, &tree).unwrap();
+
+    assert!(!tree.exists());
+    assert!(!run(&checkout, &["worktree", "list"]).contains("issue-12"));
+}
+
+#[test]
 fn a_repository_name_that_could_leave_the_root_is_refused() {
     let fixture = Fixture::new();
 
@@ -212,8 +268,10 @@ fn a_repository_name_that_could_leave_the_root_is_refused() {
         };
 
         let error = fixture.git.create(&request).unwrap_err();
+        let clone = Repository::under(&fixture.scratch.0.join("clones"), &repo).unwrap_err();
 
         assert!(error.is_permanent(), "{name}");
+        assert!(clone.is_permanent(), "{name}");
     }
 
     assert!(!fixture.scratch.0.join("worktrees").exists());
@@ -233,6 +291,7 @@ fn a_repository_reads_its_origin_its_default_branch_and_files_there() {
     let origin = repository.origin().unwrap();
     let default = repository.default_branch().unwrap();
     repository.fetch("main").unwrap();
+    repository.fetch("v2").unwrap();
     let config = repository.show("main", ".atelier/config.toml").unwrap();
     let missing = repository.show("v2", ".atelier/config.toml").unwrap();
     let unknown = repository.show("nope", ".atelier/config.toml").unwrap_err();

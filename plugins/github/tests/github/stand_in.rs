@@ -30,6 +30,8 @@ exit "$(cat "$dir/exit-$n" 2>/dev/null || echo 0)"
 pub enum Reply {
     /// A captured reply, by its fixture's name; exits 1 unless it is a 2xx.
     Captured(&'static str),
+    /// A captured reply that is plain text, not HTTP, and success.
+    Printed(&'static str),
     /// Nothing, and success, as `gh label create` prints when it works.
     Done,
     /// Nothing, and failure, as `gh` does when it cannot reach GitHub.
@@ -54,6 +56,11 @@ impl StandIn {
             let n = index + 1;
             let name = match reply {
                 Reply::Captured(name) => *name,
+                Reply::Printed(name) => {
+                    std::fs::copy(fixture(name), dir.join(format!("reply-{n}"))).unwrap();
+                    std::fs::write(dir.join(format!("exit-{n}")), "0").unwrap();
+                    continue;
+                }
                 Reply::Done => {
                     std::fs::write(dir.join(format!("exit-{n}")), "0").unwrap();
                     continue;

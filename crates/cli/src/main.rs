@@ -1,5 +1,6 @@
 //! `atelier`: watch projects, and turn labelled issues into builders.
 
+mod clone;
 mod commands;
 mod config;
 mod daemon;
@@ -32,13 +33,11 @@ enum Command {
         #[arg(long, default_value = ".")]
         path: PathBuf,
     },
-    /// Watch a project: add it to ~/.config/atelier/projects.toml.
+    /// Watch a project: clone it into atelier's own folder, and add it to
+    /// ~/.config/atelier/projects.toml.
     Add {
         /// The repository, as owner/name.
         repo: String,
-        /// The project's checkout.
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
     },
     /// Poll every watched project; what the Homebrew service runs.
     Daemon,
@@ -65,7 +64,7 @@ fn main() -> Result<ExitCode> {
 
     match cli.command {
         Command::Init { path } => commands::init(&paths, &path)?,
-        Command::Add { repo, path } => commands::add(&paths, &repo, &path)?,
+        Command::Add { repo } => commands::add(&paths, &repo)?,
         Command::Daemon => daemon::run(&paths)?,
         Command::Status => commands::status(&paths)?,
     }

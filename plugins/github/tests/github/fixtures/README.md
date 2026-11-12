@@ -16,3 +16,7 @@ this repository, except where a row says otherwise.
 | `pull-open-failed-once.txt` | **Derived** from `pull-merged.txt`, with #8 open and a draft                                       |
 | `forbidden.txt`             | `POST repos/cli/cli/issues/1/labels` without the rights: a 403 that is no rate limit               |
 | `rate-limited.txt`          | **Constructed** from GitHub's documented rate-limit reply                                          |
+
+`git-protocol-https.txt` and `git-protocol-ssh.txt` are what
+`gh config get git_protocol -h github.com` printed (gh 2.103.3, 2026-11-12)
+with a fresh configuration, then after `gh config set git_protocol ssh`.

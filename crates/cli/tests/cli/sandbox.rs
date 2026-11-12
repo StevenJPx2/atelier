@@ -1,6 +1,7 @@
-//! A sandbox for the real `atelier` binary: its own home, a real `origin`
-//! reached as `https://github.com/StevenJPx2/demo.git`, a checkout, and
-//! stand-ins for `gh` and `opencode` first on `PATH`.
+//! A sandbox for the real `atelier` binary: its own home, whose git config
+//! sends `https://github.com/<owner>/<name>.git` to a real repository
+//! under `<root>/github`, a real `origin` there for `StevenJPx2/demo`, your
+//! checkout of it, and stand-ins for `gh` and `opencode` first on `PATH`.
 
 #![expect(
     clippy::unwrap_used,
@@ -84,7 +85,7 @@ impl Sandbox {
 
         sandbox.repositories();
         sandbox.stand_ins(issues);
-        let added = sandbox.atelier(&["add", REPO, "--path", &sandbox.checkout.to_string_lossy()]);
+        let added = sandbox.atelier(&["add", REPO]);
         assert!(
             added.status.success(),
             "{}",
@@ -94,6 +95,20 @@ impl Sandbox {
     }
 
     fn repositories(&self) {
+        let github = self.root.join("github");
+        let origin = self.origin();
+        fs::create_dir_all(&github).unwrap();
+        fs::create_dir_all(&self.home).unwrap();
+        fs::write(
+            self.home.join(".gitconfig"),
+            format!(
+                "[url \"{}/\"]\n\tinsteadOf = https://github.com/\n",
+                github.display()
+            ),
+        )
+        .unwrap();
+
+        let origin_path = origin.to_string_lossy();
         git(
             &self.root,
             &[
@@ -102,20 +117,31 @@ impl Sandbox {
                 "--bare",
                 "--initial-branch",
                 "main",
-                "origin.git",
+                &origin_path,
             ],
         );
-        git(&self.root, &["clone", "--quiet", "origin.git", "seed"]);
+        git(&self.root, &["clone", "--quiet", &origin_path, "seed"]);
         git(
             &self.seed,
             &["commit", "--quiet", "--allow-empty", "-m", "base"],
         );
         git(&self.seed, &["push", "--quiet", "origin", "main"]);
-        git(&self.root, &["clone", "--quiet", "origin.git", "demo"]);
+        git(&self.root, &["clone", "--quiet", &origin_path, "demo"]);
 
-        let local = format!("url.{}.insteadOf", self.root.join("origin.git").display());
-        git(&self.checkout, &["config", &local, URL]);
+        let rewrite = format!("url.{}.insteadOf", origin.display());
+        git(&self.checkout, &["config", &rewrite, URL]);
         git(&self.checkout, &["remote", "set-url", "origin", URL]);
+    }
+
+    /// The real `origin` that `https://github.com/StevenJPx2/demo.git` reaches.
+    pub fn origin(&self) -> PathBuf {
+        self.root.join("github/StevenJPx2/demo.git")
+    }
+
+    /// atelier's own clone of the project.
+    pub fn clone(&self) -> PathBuf {
+        self.home
+            .join(".local/share/atelier/clones/StevenJPx2/demo.git")
     }
 
     fn stand_ins(&self, issues: &Value) {
@@ -124,6 +150,11 @@ impl Sandbox {
         fs::create_dir_all(&fixtures).unwrap();
         fs::create_dir_all(&opencode).unwrap();
         fs::write(fixtures.join("issue-6.json"), captured_body("issue-6.txt")).unwrap();
+        fs::copy(
+            manifest().join("../../plugins/github/tests/github/fixtures/git-protocol-https.txt"),
+            fixtures.join("git-protocol.txt"),
+        )
+        .unwrap();
 
         let captured = manifest().join("../../plugins/opencode/tests/opencode/fixtures");
         for name in [

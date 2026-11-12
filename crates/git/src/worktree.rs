@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use atelier_core::{PluginError, Repo, WorktreeRequest, Worktrees};
 
 use crate::command::{checked, git};
+use crate::folder;
 
 /// Worktrees under `root`, as `<root>/<owner>/<repo>/<name>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,32 +19,14 @@ impl Git {
     }
 
     fn path(&self, repo: &Repo, name: &str) -> Result<PathBuf, PluginError> {
-        let mut parts = repo.0.split('/');
+        let (owner, project) = folder::owner_and_name(repo)?;
 
-        let (Some(owner), Some(project), None) = (parts.next(), parts.next(), parts.next()) else {
-            return Err(PluginError::permanent(format!(
-                "{} is not owner/name",
-                repo.0
-            )));
-        };
-
-        for part in [owner, project, name] {
-            if !safe(part) {
-                return Err(PluginError::permanent(format!(
-                    "{part:?} cannot name a folder"
-                )));
-            }
-        }
-
-        Ok(self.root.join(owner).join(project).join(name))
+        Ok(self
+            .root
+            .join(owner)
+            .join(project)
+            .join(folder::checked(name)?))
     }
-}
-
-/// Letters, digits, `-`, `_` and `.`, and not only dots.
-fn safe(part: &str) -> bool {
-    let allowed = |c: char| c.is_ascii_alphanumeric() || "-_.".contains(c);
-
-    !part.is_empty() && part.chars().all(allowed) && part.chars().any(|c| c != '.')
 }
 
 impl Worktrees for Git {
@@ -105,11 +88,13 @@ impl Worktrees for Git {
     }
 
     /// Removes the worktree, even with changes the builder left, and keeps
-    /// its branch. A worktree already gone is pruned from git's list.
+    /// its branch. Git runs inside the worktree, so one made from another
+    /// repository, such as your checkout before atelier kept its own clone,
+    /// goes too. A worktree already gone is pruned from `local`'s list.
     fn remove(&self, local: &Path, worktree: &Path) -> Result<(), PluginError> {
         if worktree.exists() {
             let target = worktree.to_string_lossy();
-            checked(local, &["worktree", "remove", "--force", &target])?;
+            checked(worktree, &["worktree", "remove", "--force", &target])?;
         } else {
             checked(local, &["worktree", "prune"])?;
         }

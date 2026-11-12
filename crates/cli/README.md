@@ -8,7 +8,7 @@ alive.
 # in a project's checkout: its labels on GitHub
 atelier init
 
-# watch it: ~/.config/atelier/projects.toml
+# watch it: atelier's own clone, and ~/.config/atelier/projects.toml
 atelier add StevenJPx2/chauffeur
 
 # poll every watched project; what the service runs
@@ -19,7 +19,7 @@ atelier status
 ```
 
 ```text
-StevenJPx2/chauffeur  /Users/me/Documents/Projects/chauffeur
+StevenJPx2/chauffeur  /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git
   base        v2                       set
   ...
   github#6    Open { rounds: 1 }       issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
@@ -43,7 +43,8 @@ flowchart LR
 | ------------------ | -------------------------------------------------------------------- |
 | `main.rs`          | The commands                                                         |
 | `commands.rs`      | `init`, `add` and `status`                                           |
-| `paths.rs`         | Where your projects, the state and the worktrees live (XDG, or `~/`) |
+| `clone.rs`         | atelier's own bare clone of each project, made when missing          |
+| `paths.rs`         | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
 | `projects.rs`      | `projects.toml`: your projects and your own filters                  |
 | `config.rs`        | `.atelier/config.toml` from `origin`, what is found, what is set     |
 | `plugins.rs`       | The plugins in the build, and each project's choice of them          |
@@ -54,6 +55,9 @@ flowchart LR
 | `daemon/poll.rs`   | One project's polls: interval, soon after acting, back-off           |
 | `daemon/writer.rs` | The one thread that writes `state.json`                              |
 
+- **Its own clones.** The daemon reads each project's bare clone under
+  `~/.local/share/atelier/clones`, never your checkout, so it needs no
+  access to folders macOS guards, such as `~/Documents`.
 - **One owner per issue.** Each project polls on its own thread and owns its
   issues, so two polls never claim the same issue and a slow project never
   holds up another.

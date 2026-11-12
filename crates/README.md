@@ -25,7 +25,7 @@ flowchart TD
 | `../plugins/commands` | Gates a project lists as commands                 | Built, slice 2 |
 | `../plugins/github`   | GitHub tracker and forge                          | Built, slice 1 |
 | `../plugins/opencode` | OpenCode sessions and permissions                 | Built, slice 1 |
-| `e2e` |   check   | Built |
+| `e2e`                 | check                                             | Built          |
 
 Language plugins enter the workspace with their own slices.
 

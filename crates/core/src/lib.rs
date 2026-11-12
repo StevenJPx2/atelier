@@ -26,3 +26,4 @@ pub use roles::{
 };
 pub use seen::{Marks, PullRequest, Rollup, Seen, StageOutcome, events};
 pub use settings::{Setting, Settings, SettingsError};
+pub const E2E_HOOK: u8 = 1;

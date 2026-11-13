@@ -149,15 +149,19 @@ pub fn stop(folder: &Path) -> Result<(), PluginError> {
             )));
         }
     };
-    let group = text
-        .trim()
-        .parse::<u32>()
-        .ok()
-        .filter(|group| *group > 1)
-        .ok_or_else(|| PluginError::permanent("the command's group is invalid"))?;
+    let group = command_group(&text)?;
 
     kill(u64::from(group));
     Ok(())
+}
+
+/// Refuses special signal targets before any process is signalled.
+fn command_group(text: &str) -> Result<u32, PluginError> {
+    text.trim()
+        .parse::<u32>()
+        .ok()
+        .filter(|group| *group > 1)
+        .ok_or_else(|| PluginError::permanent("the command's group is invalid"))
 }
 
 /// The outcome its exit status gives, once it has one.

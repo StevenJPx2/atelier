@@ -205,6 +205,17 @@ impl Sandbox {
         git(&self.seed, &["switch", "--quiet", "main"]);
     }
 
+    /// Commits `text` as the file at `path` on `origin`'s main.
+    pub fn commit(&self, path: &str, text: &str) {
+        let file = self.seed.join(path);
+        git(&self.seed, &["switch", "--quiet", "main"]);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, text).unwrap();
+        git(&self.seed, &["add", path]);
+        git(&self.seed, &["commit", "--quiet", "-m", path]);
+        git(&self.seed, &["push", "--quiet", "origin", "main"]);
+    }
+
     /// What `atelier status` prints.
     pub fn status(&self) -> String {
         String::from_utf8(self.atelier(&["status"]).stdout).unwrap()

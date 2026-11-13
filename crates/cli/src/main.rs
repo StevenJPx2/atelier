@@ -1,6 +1,7 @@
 //! `atelier`: watch projects, and turn labelled issues into builders.
 
 mod clone;
+mod command_step;
 mod commands;
 mod config;
 mod daemon;
@@ -110,7 +111,7 @@ fn main() -> Result<ExitCode> {
         Command::Add { repo } => commands::add(&paths, &repo)?,
         Command::Daemon => daemon::run(&paths)?,
         Command::Status => commands::status(&paths)?,
-        Command::Gates { diff, json, path } => gates::list(&path, diff.as_deref(), json)?,
+        Command::Gates { diff, json, path } => gates::list(&paths, &path, diff.as_deref(), json)?,
         Command::Check {
             diff,
             gate,
@@ -124,13 +125,13 @@ fn main() -> Result<ExitCode> {
                 root: root.as_deref(),
                 setup,
             };
-            return gates::check(&path, &selection);
+            return gates::check(&paths, &path, &selection);
         }
         Command::Fix {
             staged,
             files,
             path,
-        } => return gates::fix(&path, staged, &files),
+        } => return gates::fix(&paths, &path, staged, &files),
     }
 
     Ok(ExitCode::SUCCESS)

@@ -76,7 +76,10 @@ pub fn submit(folder: &Path, key: &IssueKey, request: &Request) -> Result<()> {
 
 /// Releases a writer's temporary reservation after its write.
 fn release(temporary: &Path, result: std::io::Result<bool>) -> Result<bool> {
-    let _ = fs::remove_file(temporary);
+    if !matches!(result, Ok(true)) {
+        let _ = fs::remove_file(temporary);
+    }
+
     result.wrap_err("writing a request")
 }
 
@@ -240,6 +243,27 @@ mod tests {
             .collect::<Vec<_>>();
         expected.sort();
         assert_eq!(reasons, expected);
+    }
+
+    #[test]
+    fn a_successful_rename_does_not_release_the_next_writers_reservation() {
+        let scratch = Scratch::new();
+        let temporary = scratch.0.join("0.tmp");
+        let ready = scratch.0.join("0.json");
+        fs::write(&temporary, "first").unwrap();
+        fs::rename(&temporary, &ready).unwrap();
+        // A second writer checked the ready path before the first rename,
+        // then reserved its temporary path after the rename.
+        fs::write(&temporary, "second writer owns this").unwrap();
+
+        let written = release(&temporary, Ok(true)).unwrap();
+
+        assert!(written);
+        assert_eq!(
+            fs::read_to_string(&temporary).unwrap(),
+            "second writer owns this"
+        );
+        assert_eq!(fs::read_to_string(&ready).unwrap(), "first");
     }
 
     #[test]

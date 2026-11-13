@@ -181,16 +181,18 @@ pub fn status(paths: &Paths) -> Result<()> {
                 .iter()
                 .find(|pipeline| pipeline.name() == record.pipeline);
 
-            run(&key.to_string(), record, pipeline);
+            for line in run(&key.to_string(), record, pipeline) {
+                println!("{line}");
+            }
         }
     }
 
     Ok(())
 }
 
-/// One run: its item, pipeline and phase, its branch, session and pull
-/// request, then each step's status.
-fn run(key: &str, record: &Record, pipeline: Option<&Pipeline>) {
+/// One run's lines: its item, pipeline and phase, its branch, session and
+/// pull request, then each step's status.
+fn run(key: &str, record: &Record, pipeline: Option<&Pipeline>) -> Vec<String> {
     let phase = format!("{} {}", record.pipeline, phase(record));
     let session = record
         .sessions()
@@ -200,10 +202,10 @@ fn run(key: &str, record: &Record, pipeline: Option<&Pipeline>) {
         .pull_request
         .map_or_else(|| "-".to_owned(), |number| format!("#{number}"));
 
-    println!(
+    let mut lines = vec![format!(
         "  {key:<11} {phase:<24} {}  {session}  {pull_request}",
         record.branch
-    );
+    )];
 
     let steps: Vec<String> = record
         .steps
@@ -231,8 +233,10 @@ fn run(key: &str, record: &Record, pipeline: Option<&Pipeline>) {
         .collect();
 
     if !steps.is_empty() {
-        println!("    {}", steps.join(", "));
+        lines.push(format!("    {}", steps.join(", ")));
     }
+
+    lines
 }
 
 /// The run's phase as a person reads it, such as `Blocked at checks`.
@@ -275,6 +279,73 @@ fn show(pipelines: &[Pipeline], written: &[config::Written]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_run_shows_its_phase_and_each_step_s_status_and_failed_rounds() {
+        use atelier_core::rungs::{Outcome, Progress};
+        use atelier_core::{IssueKey, StepRecord};
+
+        let key = IssueKey {
+            tracker: "github".into(),
+            id: "12".into(),
+        };
+        let mut record = Record::new(&key, "Fix the dead link", "build");
+        let mut progress = Progress::default();
+        progress.status[0] = Status::Settled(Outcome(0));
+        progress.status[1] = Status::Running;
+        progress.status[2] = Status::Skipped;
+        progress.status[3] = Status::Settled(Outcome::FAILED);
+        progress.failed[1] = 1;
+        progress.failed[3] = 2;
+        record.phase = Phase::Running;
+        record.progress = progress;
+        record.pull_request = Some(8);
+        record.steps = ["worktree", "checks", "lint", "merge", "late"]
+            .map(|id| StepRecord {
+                id: id.into(),
+                session: None,
+                why: None,
+            })
+            .to_vec();
+
+        let lines = run("github#12", &record, None);
+        let phases: Vec<String> = [
+            Phase::Blocked(Reason::Failed(3)),
+            Phase::Blocked(Reason::Start(1)),
+            Phase::Blocked(Reason::Claim),
+            Phase::Blocked(Reason::Changed),
+            Phase::Blocked(Reason::LostTrack),
+            Phase::Done,
+        ]
+        .into_iter()
+        .map(|phase| {
+            self::phase(&Record {
+                phase,
+                ..record.clone()
+            })
+        })
+        .collect();
+
+        assert_eq!(
+            lines,
+            [
+                "  github#12   build Running            issue-12-fix-the-dead-link  -  #8",
+                "    worktree outcome 0, checks running (1 failed round), lint skipped, \
+                 merge outcome 127 (2 failed rounds), late pending",
+            ]
+        );
+        assert_eq!(
+            phases,
+            [
+                "Blocked at merge",
+                "Blocked starting checks",
+                "Blocked claiming",
+                "Blocked, changed",
+                "Blocked, lost track",
+                "Done",
+            ]
+        );
+    }
 
     #[test]
     fn each_ci_file_is_written_in_its_folder_under_the_top() {

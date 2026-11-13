@@ -141,3 +141,39 @@ fn the_daemon_takes_no_issue_in_a_project_whose_pipeline_it_cannot_run() {
 
     assert_eq!(sandbox.phase("12"), None);
 }
+#[test]
+fn a_written_build_runs_its_command_in_the_worktree_and_closes_the_issue_with_each_outcome() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    sandbox.config(
+        "poll = 15\n\n[[pipeline.build.step]]\nid = \"worktree\"\nuses = \"git.worktree\"\n\n\
+         [[pipeline.build.step]]\nid = \"deps\"\nuses = \"atelier.command\"\n\
+         run = \"git rev-parse --abbrev-ref HEAD; echo $ATELIER_BASE\"\n",
+    );
+
+    let daemon = sandbox.daemon();
+    sandbox.wait("the run done", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("done")
+    });
+    drop(daemon);
+
+    let issue = &sandbox.world()["issues"]["12"];
+    let report = issue["comments"][0].as_str().unwrap_or_default();
+    let output = sandbox
+        .home
+        .join(".local/state/atelier/steps/StevenJPx2/demo/issue-12/build/deps/output");
+    assert_eq!(issue["state"], "closed", "{issue}");
+    assert!(report.starts_with("atelier finished `build`:"), "{report}");
+    assert!(
+        report.contains("- `deps`: passed (it exited 0)"),
+        "{report}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(output).unwrap(),
+        "issue-12-fix-the-dead-link\norigin/main\n"
+    );
+    assert!(
+        sandbox
+            .log()
+            .contains("build github#12 Running → Done: deps settled passed")
+    );
+}

@@ -59,6 +59,52 @@ impl Settings {
         }
     }
 
+    /// The setting at `key`, if set.
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&Setting> {
+        self.0.get(key)
+    }
+
+    /// The number at `key`, if set.
+    ///
+    /// # Errors
+    ///
+    /// The key holds something else.
+    pub fn number(&self, path: &str, key: &str) -> Result<Option<i64>, SettingsError> {
+        match self.0.get(key) {
+            None => Ok(None),
+            Some(Setting::Number(number)) => Ok(Some(*number)),
+            Some(_) => Err(SettingsError::new(path, key, "must be a number")),
+        }
+    }
+
+    /// The flag at `key`, if set.
+    ///
+    /// # Errors
+    ///
+    /// The key holds something else.
+    pub fn flag(&self, path: &str, key: &str) -> Result<Option<bool>, SettingsError> {
+        match self.0.get(key) {
+            None => Ok(None),
+            Some(Setting::Flag(flag)) => Ok(Some(*flag)),
+            Some(_) => Err(SettingsError::new(path, key, "must be true or false")),
+        }
+    }
+
+    /// These settings without `keys`.
+    #[must_use]
+    pub fn without(&self, keys: &[&str]) -> Self {
+        let kept = self
+            .0
+            .iter()
+            .filter(|(key, _)| !keys.contains(&key.as_str()));
+
+        Self(
+            kept.map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+        )
+    }
+
     /// The list of text at `key`; empty when unset.
     ///
     /// # Errors
@@ -183,6 +229,33 @@ mod tests {
         assert_eq!(
             setup.iter().map(|(key, _)| key).collect::<Vec<_>>(),
             ["mixed", "one", "setup"]
+        );
+    }
+
+    #[test]
+    fn numbers_and_flags_are_read_and_keys_left_out() {
+        let step = Settings::default()
+            .with("rounds", Setting::Number(5))
+            .with("restart", Setting::Flag(true))
+            .with("id", Setting::Text("checks".into()));
+
+        assert_eq!(step.number("checks", "rounds").unwrap(), Some(5));
+        assert_eq!(step.number("checks", "unset").unwrap(), None);
+        assert_eq!(
+            step.number("checks", "restart").unwrap_err().to_string(),
+            "checks.restart: must be a number"
+        );
+        assert_eq!(step.flag("checks", "restart").unwrap(), Some(true));
+        assert_eq!(step.flag("checks", "unset").unwrap(), None);
+        assert_eq!(
+            step.flag("checks", "rounds").unwrap_err().to_string(),
+            "checks.rounds: must be true or false"
+        );
+        assert_eq!(step.get("id"), Some(&Setting::Text("checks".into())));
+        assert_eq!(step.get("unset"), None);
+        assert_eq!(
+            step.without(&["id", "restart"]),
+            Settings::default().with("rounds", Setting::Number(5))
         );
     }
 }

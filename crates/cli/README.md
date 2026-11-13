@@ -62,7 +62,7 @@ flowchart LR
 | `projects.rs`      | `projects.toml`: your projects and your own filters                  |
 | `config.rs`        | `.atelier/config.toml` from `origin`, what is found, what is set     |
 | `build.toml`       | The built-in `build` pipeline, unless the config writes its own      |
-| `command_step.rs`  | `atelier`, the plugin of atelier's own kind of step, `command`       |
+| `command_step/`    | `atelier`, the plugin of atelier's own kind of step, `command`       |
 | `plugins.rs`       | The plugins in the build, and each project's choice of them          |
 | `state.rs`         | `state.json`, written whole and renamed into place                   |
 | `log.rs`           | One line per event, with a UTC time                                  |

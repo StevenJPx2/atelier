@@ -282,6 +282,27 @@ mod tests {
     }
 
     #[test]
+    fn an_exactly_maximum_sized_request_can_be_submitted() {
+        let scratch = Scratch::new();
+        let overhead = serde_json::to_vec(&File::new(&key(), &finish("")))
+            .unwrap()
+            .len();
+        let request = finish(&"x".repeat(8192 - overhead));
+        assert_eq!(
+            serde_json::to_vec(&File::new(&key(), &request))
+                .unwrap()
+                .len(),
+            8192
+        );
+
+        submit(&scratch.0, &key(), &request).unwrap();
+        let queued = read(&scratch.0).unwrap();
+
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].request, request);
+    }
+
+    #[test]
     fn an_exactly_maximum_sized_ready_request_is_read() {
         let scratch = Scratch::new();
         let mut bytes = serde_json::to_vec(&File::new(&key(), &finish("clean"))).unwrap();

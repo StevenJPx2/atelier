@@ -194,6 +194,56 @@ fn finish_outside_a_run_and_stop_with_no_matching_run_are_refused() {
     assert!(String::from_utf8_lossy(&stop.stderr).contains("no working run has that key"));
 }
 #[test]
+fn finish_requires_both_a_working_run_and_its_matching_worktree() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let daemon = sandbox.daemon();
+    sandbox.wait("builder", Sandbox::building);
+    drop(daemon);
+    let path = worktree(&sandbox);
+    let state_path = sandbox.home.join(".local/state/atelier/state.json");
+    let mut state = sandbox.state();
+
+    let elsewhere = sandbox.atelier(&[
+        "finish",
+        "nothing",
+        "clean",
+        "--path",
+        &sandbox.checkout.to_string_lossy(),
+    ]);
+    assert!(!elsewhere.status.success());
+    assert!(
+        String::from_utf8_lossy(&elsewhere.stderr).contains("no working run owns this worktree")
+    );
+
+    // Keep the real worktree and running step from the saved run, while
+    // representing an inactive run before its cleanup removes the tree.
+    for phase in [
+        serde_json::json!({"name": "untracked"}),
+        serde_json::json!({"name": "done"}),
+        serde_json::json!({"name": "blocked", "reason": {"name": "claim"}}),
+        serde_json::json!({"name": "stopped"}),
+    ] {
+        state["projects"][REPO]["runs"][0]["phase"] = phase;
+        fs::write(&state_path, serde_json::to_vec(&state).unwrap()).unwrap();
+
+        let inactive = sandbox.atelier(&[
+            "finish",
+            "nothing",
+            "clean",
+            "--path",
+            &path.to_string_lossy(),
+        ]);
+
+        assert!(!inactive.status.success());
+        assert!(
+            String::from_utf8_lossy(&inactive.stderr).contains("no working run owns this worktree")
+        );
+    }
+
+    assert!(!sandbox.home.join(".local/state/atelier/requests").exists());
+}
+
+#[test]
 fn stopping_a_run_cancels_its_background_command_group() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     sandbox.config(

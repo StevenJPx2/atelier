@@ -384,6 +384,18 @@ mod tests {
     }
 
     #[test]
+    fn command_groups_exclude_special_signal_targets() {
+        // Check the parser without signalling: a broken guard must not
+        // turn this regression into a signal to unrelated processes.
+        for text in ["0", "1", "-1", "not a group", "4294967296"] {
+            assert!(command_group(text).unwrap_err().is_permanent(), "{text}");
+        }
+
+        assert_eq!(command_group(" 2\n").unwrap(), 2);
+        assert_eq!(command_group("4294967295").unwrap(), u32::MAX);
+    }
+
+    #[test]
     fn cleanup_refuses_an_invalid_or_unreadable_group() {
         let scratch = Scratch::new("bad-group");
         fs::create_dir_all(scratch.folder()).unwrap();

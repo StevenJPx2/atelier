@@ -382,6 +382,11 @@ mod tests {
         assert_eq!(status(pushed, MERGE), Status::Pending);
         assert_eq!(pushed.progress.failed[2], 1);
         assert_eq!(status(pushed, BUILDER), Status::Settled(PASSED));
+        let running = checking();
+        assert_eq!(
+            step(running, Event::Pushed { step: CHECKS }, &plan),
+            (running, vec![])
+        );
         assert_eq!(
             step(building(), Event::Pushed { step: CHECKS }, &plan).1,
             []

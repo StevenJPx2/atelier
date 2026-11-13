@@ -684,6 +684,29 @@ an older file into the written-out `build`: Building is `builder` running; Open
 is `builder` settled `opened` and `checks` running; Green is `ready` running;
 and Ready is `merge` running.
 
+Files: `crates/cli/src/state/`.
+
+#### Structure
+
+An older file's `issues` are read beside `runs` and never written back, so
+the first save after the upgrade writes each as a run. Each issue keeps its
+branch, worktree, pull request and pending actions, and its builder's
+session on `builder`; a stage, which no plugin ran, reads as the checks it
+followed. Done has every step settled; Blocked and Stopped start fresh when
+requested again.
+
+```rust
+struct ProjectFile {
+    runs: Vec<RunFile>,
+    issues: Vec<older::IssueFile>,
+    etags: Vec<EtagFile>,
+}
+
+impl older::IssueFile {
+    pub fn into_record(self) -> (IssueKey, Record);
+}
+```
+
 ### Verification
 
 - Kani as above, and the config check's refusals, one test each.

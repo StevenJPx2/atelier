@@ -2,7 +2,9 @@
 
 Each issue's builder works in its own worktree, on its own branch, made
 from atelier's own clone of the project through the `git` command and the
-user's own sign-ins. The crate also reads a checkout's files for the gates.
+user's own sign-ins. The crate also reads a checkout's files for the gates,
+and `origin`'s files at a branch for the config. As a plugin, `git` offers
+pipelines the `git.worktree` kind of step.
 
 ```mermaid
 flowchart TD
@@ -16,13 +18,14 @@ flowchart TD
     Remote -->|"no"| New["worktree add, new from origin/base"]
 ```
 
-| File            | Holds                                                          |
-| --------------- | -------------------------------------------------------------- |
-| `worktree.rs`   | `Git`, core's `Worktrees`, and where each worktree lives       |
-| `repository.rs` | `Repository`: a project's bare clone or checkout, and `origin` |
-| `tree.rs`       | `WorkingTree`: a checkout's files, core's `Tree`, its changes  |
-| `folder.rs`     | Folder names from a repository's, kept inside their root       |
-| `command.rs`    | Running `git` through `atelier-command`, never prompting       |
+| File            | Holds                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `worktree.rs`   | `Git`, core's `Worktrees`, and where each worktree lives                                                   |
+| `repository.rs` | `Repository`: a project's bare clone or checkout, and `origin`; `BranchTree`, a branch of `origin`'s files |
+| `steps.rs`      | `git` as a plugin, offering the `git.worktree` kind of step                                                |
+| `tree.rs`       | `WorkingTree`: a checkout's files, core's `Tree`, its changes                                              |
+| `folder.rs`     | Folder names from a repository's, kept inside their root                                                   |
+| `command.rs`    | Running `git` through `atelier-command`, never prompting                                                   |
 
 ```rust
 let git = Git::new("/Users/me/.local/share/atelier/worktrees");

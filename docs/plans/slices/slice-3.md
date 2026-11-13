@@ -275,6 +275,31 @@ pub enum Outcomes {
 }
 ```
 
+`git` is a plugin of its own, offering `worktree`. GitHub offers `checks`,
+`ready` and `merge`, none with settings. OpenCode offers `session`, which
+takes `prompt`, a file on the base branch whose text it keeps under `text`,
+or `brief = "builder"`. A prompt is read from `origin/<base>` through a
+`BranchTree`, listed once and each file read when asked.
+
+```rust
+impl Plugin for Git {}
+impl Step for Git {}
+impl Step for GitHub {}
+impl Step for OpenCode {}
+
+impl Repository {
+    pub fn tree(&self, branch: &str) -> Result<BranchTree, PluginError>;
+}
+
+pub struct BranchTree {
+    repository: Repository,
+    branch: String,
+    files: Vec<String>,
+}
+
+impl Tree for BranchTree {}
+```
+
 ### The `build` pipeline
 
 Built in, and written in the same terms. A project that writes

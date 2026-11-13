@@ -13,7 +13,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use atelier_core::{Repo, WorktreeRequest, Worktrees};
+use atelier_core::{
+    Kind, Outcomes, Plugin, Repo, Setting, Settings, Step, Tree, WorktreeRequest, Worktrees,
+};
 use atelier_git::{Git, Repository};
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
@@ -343,6 +345,63 @@ fn a_repository_reads_its_origin_its_default_branch_and_files_there() {
     assert_eq!(missing, None);
     assert!(unknown.is_permanent());
     assert!(!unfetchable.is_permanent());
+}
+
+#[test]
+fn a_branch_tree_lists_and_reads_origin_s_files_as_last_fetched() {
+    let fixture = Fixture::new();
+    std::fs::create_dir_all(fixture.seed.join(".atelier/prompts")).unwrap();
+    std::fs::write(
+        fixture.seed.join(".atelier/prompts/audit.md"),
+        "Audit it.\n",
+    )
+    .unwrap();
+    std::fs::write(fixture.seed.join("README.md"), "# chauffeur\n").unwrap();
+    run(&fixture.seed, &["add", "."]);
+    run(&fixture.seed, &["commit", "--quiet", "-m", "prompts"]);
+    run(&fixture.seed, &["push", "--quiet", "origin", "v2"]);
+    let repository = Repository::new(&fixture.local);
+    repository.fetch("v2").unwrap();
+
+    let tree = repository.tree("v2").unwrap();
+    let unknown = repository.tree("nope").unwrap_err();
+
+    assert_eq!(tree.files(), [".atelier/prompts/audit.md", "README.md"]);
+    assert_eq!(
+        tree.read(".atelier/prompts/audit.md").as_deref(),
+        Some("Audit it.\n")
+    );
+    assert_eq!(tree.read("missing.md"), None);
+    assert_eq!(tree.read(".atelier/prompts"), None);
+    assert!(unknown.is_permanent());
+}
+
+#[test]
+fn git_offers_the_worktree_kind_which_takes_no_settings() {
+    let git = Git::new("/worktrees");
+    let tree = atelier_core::MemoryTree::default();
+    let extra = Settings::default().with("path", Setting::Text("/tmp".into()));
+
+    assert_eq!(git.name(), "git");
+    assert_eq!(
+        git.kinds(),
+        [Kind {
+            name: "worktree",
+            outcomes: Outcomes::Own(&["passed"]),
+            resident: false,
+        }]
+    );
+    assert_eq!(
+        git.configure("worktree", &Settings::default(), &tree)
+            .unwrap(),
+        Settings::default()
+    );
+    assert_eq!(
+        git.configure("worktree", &extra, &tree)
+            .unwrap_err()
+            .to_string(),
+        "path: unknown; it takes no settings"
+    );
 }
 #[test]
 fn a_worktree_gets_its_own_hooks_and_the_clone_stays_bare() {

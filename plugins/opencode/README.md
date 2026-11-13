@@ -2,7 +2,9 @@
 
 Each builder is an ordinary OpenCode session: started by atelier in its
 worktree, open in the TUI to watch or talk to, and refusing what its brief
-denies without asking anyone.
+denies without asking anyone. As the agent it offers pipelines the
+`opencode.session` kind of step, or `agent.session` in a project whose agent
+is OpenCode.
 
 ```mermaid
 sequenceDiagram
@@ -16,12 +18,13 @@ sequenceDiagram
     P-->>A: Session
 ```
 
-| File             | Holds                                                                   |
-| ---------------- | ----------------------------------------------------------------------- |
-| `lib.rs`         | `OpenCode`, and `Plugin`: registers the agent                           |
-| `session.rs`     | Starting a session with its brief, telling it, and interrupting it      |
-| `permissions.rs` | The brief's denials as the session's permission rules                   |
-| `api.rs`         | `opencode api` with a 30-second deadline; 4xx permanent, else transient |
+| File             | Holds                                                                       |
+| ---------------- | --------------------------------------------------------------------------- |
+| `lib.rs`         | `OpenCode`, and `Plugin`: registers the agent and its kind of step          |
+| `steps.rs`       | The agent's kind of step, `session`, with its prompt or the builder's brief |
+| `session.rs`     | Starting a session with its brief, telling it, and interrupting it          |
+| `permissions.rs` | The brief's denials as the session's permission rules                       |
+| `api.rs`         | `opencode api` with a 30-second deadline; 4xx permanent, else transient     |
 
 ```rust
 let opencode = OpenCode::new();

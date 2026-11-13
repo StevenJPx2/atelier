@@ -1,7 +1,9 @@
 # The `github` plugin
 
 GitHub fills two roles: tracker, for issues, and forge, for pull requests and
-their checks. Every call goes through `gh`, so it carries the user's own
+their checks. As the forge it offers pipelines three kinds of step:
+`github.checks`, `github.ready` and `github.merge`, or `forge.*` in a project
+whose forge is GitHub. Every call goes through `gh`, so it carries the user's own
 sign-in, and runs with a 30-second deadline.
 
 ```mermaid
@@ -14,7 +16,8 @@ flowchart LR
 
 | File         | Holds                                                                    |
 | ------------ | ------------------------------------------------------------------------ |
-| `lib.rs`     | `GitHub`, and `Plugin`: registers the tracker and the forge              |
+| `lib.rs`     | `GitHub`, and `Plugin`: registers the tracker, the forge and its steps   |
+| `steps.rs`   | The forge's kinds of step: `checks`, `ready` and `merge`                 |
 | `api.rs`     | `gh api --include`: status, headers and body; rate limits; encoding      |
 | `tracker.rs` | `GitHubTracker`: listing with ETags and pages, search, marking, comments |
 | `labels.rs`  | `Labels`: each mark's label, from the project's settings                 |

@@ -41,7 +41,11 @@ impl Settings {
     /// A key the plugin does not know, named under `path`.
     pub fn only(&self, path: &str, known: &[&str]) -> Result<(), SettingsError> {
         let unknown = self.0.keys().find(|key| !known.contains(&key.as_str()));
-        let problem = format!("unknown; it takes {}", known.join(", "));
+        let problem = if known.is_empty() {
+            "unknown; it takes no settings".to_owned()
+        } else {
+            format!("unknown; it takes {}", known.join(", "))
+        };
 
         unknown.map_or(Ok(()), |key| Err(SettingsError::new(path, key, &problem)))
     }
@@ -207,6 +211,11 @@ mod tests {
             "labels: unknown; it takes filter, lables"
         );
         assert!(labels.only("labels", &["build", "working"]).is_ok());
+        assert_eq!(
+            labels.only("worktree", &[]).unwrap_err().to_string(),
+            "worktree.build: unknown; it takes no settings"
+        );
+        assert!(Settings::default().only("worktree", &[]).is_ok());
 
         let setup = Settings::default()
             .with(

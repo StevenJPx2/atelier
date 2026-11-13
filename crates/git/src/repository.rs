@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{PluginError, Repo};
+use atelier_core::{PluginError, Repo, Tree};
 
 use crate::command::{checked, git};
 use crate::folder;
@@ -126,5 +126,50 @@ impl Repository {
         let output = git(&self.path, &["show", &format!("{remote}:{path}")])?;
 
         Ok(output.success.then_some(output.stdout))
+    }
+
+    /// `origin/<branch>`'s files, as last fetched, as checks plugins and
+    /// step kinds read them.
+    ///
+    /// # Errors
+    ///
+    /// Git cannot run, or `origin/<branch>` is unknown.
+    pub fn tree(&self, branch: &str) -> Result<BranchTree, PluginError> {
+        let remote = format!("origin/{branch}");
+        let listed = checked(&self.path, &["ls-tree", "-r", "-z", "--name-only", &remote])?;
+        let files = listed
+            .split('\0')
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned)
+            .collect();
+
+        Ok(BranchTree {
+            repository: self.clone(),
+            branch: branch.to_owned(),
+            files,
+        })
+    }
+}
+
+/// A branch of `origin`'s files, listed once and each read when asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchTree {
+    repository: Repository,
+    branch: String,
+    files: Vec<String>,
+}
+
+impl Tree for BranchTree {
+    fn files(&self) -> Vec<String> {
+        self.files.clone()
+    }
+
+    /// The file's text, for a file the branch has.
+    fn read(&self, path: &str) -> Option<String> {
+        if !self.files.iter().any(|file| file == path) {
+            return None;
+        }
+
+        self.repository.show(&self.branch, path).ok().flatten()
     }
 }

@@ -4,6 +4,7 @@
 mod api;
 mod permissions;
 mod session;
+mod steps;
 
 use std::path::PathBuf;
 
@@ -46,5 +47,6 @@ impl Plugin for OpenCode {
 
     fn register<'a>(&'a self, registry: &mut Registry<'a>) {
         registry.agent(self);
+        registry.step(self);
     }
 }

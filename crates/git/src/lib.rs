@@ -1,5 +1,5 @@
 //! Worktrees and branches through the `git` command, behind core's
-//! `Worktrees` role.
+//! `Worktrees` role, and the `git.worktree` kind of step.
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -24,9 +24,10 @@
 mod command;
 mod folder;
 mod repository;
+mod steps;
 mod tree;
 mod worktree;
 
-pub use repository::Repository;
+pub use repository::{BranchTree, Repository};
 pub use tree::{Staged, WorkingTree};
 pub use worktree::Git;

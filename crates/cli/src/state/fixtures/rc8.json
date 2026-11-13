@@ -1,0 +1,246 @@
+{
+  "projects": {
+    "StevenJPx2/atelier": {
+      "issues": [
+        {
+          "tracker": "github",
+          "id": "11",
+          "phase": {
+            "name": "preparing"
+          },
+          "title": "Issue 11",
+          "branch": "issue-11",
+          "worktree": "/worktrees/issue-11",
+          "session": {
+            "id": "ses_11",
+            "title": "#11 Issue 11"
+          },
+          "pull_request": null,
+          "pending": [
+            {
+              "action": "create_worktree"
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "12",
+          "phase": {
+            "name": "building"
+          },
+          "title": "Issue 12",
+          "branch": "issue-12",
+          "worktree": "/worktrees/issue-12",
+          "session": {
+            "id": "ses_12",
+            "title": "#12 Issue 12"
+          },
+          "pull_request": null,
+          "pending": [
+            {
+              "action": "comment_session"
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "13",
+          "phase": {
+            "name": "open",
+            "rounds": 2
+          },
+          "title": "Issue 13",
+          "branch": "issue-13",
+          "worktree": "/worktrees/issue-13",
+          "session": {
+            "id": "ses_13",
+            "title": "#13 Issue 13"
+          },
+          "pull_request": null,
+          "pending": []
+        },
+        {
+          "tracker": "github",
+          "id": "14",
+          "phase": {
+            "name": "stage",
+            "index": 0,
+            "rounds": 1
+          },
+          "title": "Issue 14",
+          "branch": "issue-14",
+          "worktree": "/worktrees/issue-14",
+          "session": {
+            "id": "ses_14",
+            "title": "#14 Issue 14"
+          },
+          "pull_request": null,
+          "pending": [
+            {
+              "action": "start_stage",
+              "index": 0
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "21",
+          "phase": {
+            "name": "green",
+            "rounds": 1
+          },
+          "title": "Issue 21",
+          "branch": "issue-21",
+          "worktree": "/worktrees/issue-21",
+          "session": {
+            "id": "ses_21",
+            "title": "#21 Issue 21"
+          },
+          "pull_request": 8,
+          "pending": [
+            {
+              "action": "tell_green"
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "22",
+          "phase": {
+            "name": "ready",
+            "rounds": 1
+          },
+          "title": "Issue 22",
+          "branch": "issue-22",
+          "worktree": "/worktrees/issue-22",
+          "session": {
+            "id": "ses_22",
+            "title": "#22 Issue 22"
+          },
+          "pull_request": 8,
+          "pending": []
+        },
+        {
+          "tracker": "github",
+          "id": "23",
+          "phase": {
+            "name": "done"
+          },
+          "title": "Issue 23",
+          "branch": "issue-23",
+          "worktree": "/worktrees/issue-23",
+          "session": {
+            "id": "ses_23",
+            "title": "#23 Issue 23"
+          },
+          "pull_request": 8,
+          "pending": [
+            {
+              "action": "close_issue"
+            },
+            {
+              "action": "unmark",
+              "mark": "working"
+            },
+            {
+              "action": "remove_worktree"
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "24",
+          "phase": {
+            "name": "blocked",
+            "reason": {
+              "name": "red_rounds"
+            }
+          },
+          "title": "Issue 24",
+          "branch": "issue-24",
+          "worktree": "/worktrees/issue-24",
+          "session": {
+            "id": "ses_24",
+            "title": "#24 Issue 24"
+          },
+          "pull_request": 8,
+          "pending": [
+            {
+              "action": "interrupt"
+            },
+            {
+              "action": "comment",
+              "reason": {
+                "name": "red_rounds"
+              }
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "25",
+          "phase": {
+            "name": "stopped"
+          },
+          "title": "Issue 25",
+          "branch": "issue-25",
+          "worktree": "/worktrees/issue-25",
+          "session": {
+            "id": "ses_25",
+            "title": "#25 Issue 25"
+          },
+          "pull_request": 8,
+          "pending": []
+        },
+        {
+          "tracker": "github",
+          "id": "26",
+          "phase": {
+            "name": "claiming"
+          },
+          "title": "Issue 26",
+          "branch": "issue-26",
+          "worktree": "/worktrees/issue-26",
+          "session": {
+            "id": "ses_26",
+            "title": "#26 Issue 26"
+          },
+          "pull_request": 8,
+          "pending": [
+            {
+              "action": "mark",
+              "mark": "working"
+            },
+            {
+              "action": "unmark",
+              "mark": "build"
+            }
+          ]
+        },
+        {
+          "tracker": "github",
+          "id": "27",
+          "phase": {
+            "name": "blocked",
+            "reason": {
+              "name": "stage",
+              "index": 1
+            }
+          },
+          "title": "Issue 27",
+          "branch": "issue-27",
+          "worktree": null,
+          "session": null,
+          "pending": []
+        }
+      ],
+      "etags": [
+        {
+          "tracker": "github",
+          "mark": "build",
+          "etag": "W/\"a\""
+        }
+      ]
+    }
+  }
+}

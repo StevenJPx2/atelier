@@ -1,6 +1,8 @@
 //! `~/.local/state/atelier/state.json`: each project's runs and listing
 //! tags. Written to a temporary file and renamed, so a stop never leaves it
-//! half written.
+//! half written; a file an earlier rc wrote is read too.
+
+mod older;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -20,6 +22,9 @@ struct File {
 struct ProjectFile {
     #[serde(default)]
     runs: Vec<RunFile>,
+    /// Each issue, as `0.1.0-rc.8` and earlier wrote it.
+    #[serde(default, skip_serializing)]
+    issues: Vec<older::IssueFile>,
     etags: Vec<EtagFile>,
 }
 
@@ -159,7 +164,8 @@ pub fn write(path: &Path, projects: &BTreeMap<String, State>) -> Result<()> {
 
 impl From<ProjectFile> for State {
     fn from(file: ProjectFile) -> Self {
-        let runs = file.runs.into_iter().map(RunFile::into_record);
+        let older = file.issues.into_iter().map(older::IssueFile::into_record);
+        let runs = file.runs.into_iter().map(RunFile::into_record).chain(older);
         let etags = file
             .etags
             .into_iter()
@@ -186,6 +192,7 @@ impl From<&State> for ProjectFile {
 
         Self {
             runs: runs.collect(),
+            issues: Vec::new(),
             etags: etags.collect(),
         }
     }

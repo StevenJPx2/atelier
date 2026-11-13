@@ -67,7 +67,7 @@ flowchart LR
 | `build.toml`       | The built-in `build` pipeline, unless the config writes its own      |
 | `command_step/`    | `atelier`, the plugin of atelier's own kind of step, `command`       |
 | `plugins.rs`       | The plugins in the build, and each project's choice of them          |
-| `state.rs`         | `state.json`, written whole and renamed into place                   |
+| `state/`           | `state.json`, written whole and renamed; an earlier rc's file read   |
 | `log.rs`           | One line per event, with a UTC time                                  |
 | `daemon/mod.rs`    | The supervisor: rereads `projects.toml` every 5 s                    |
 | `daemon/lock.rs`   | The lock that lets one daemon run, holding its process id            |

@@ -1,2 +1,10 @@
-# atelier's docs live in the Workhorse hub, under /atelier/, at the same paths.
+# Earlier site paths omit the repository's docs/ prefix.
+/plans.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/ 301
+/plans https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/ 301
+/plans/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/:splat 301
+/audits.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/audits https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/audits/ https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/audits/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/:splat 301
+# Repository-relative paths keep their path in the hub.
 /* https://workhorse-docs.stevenjpx2.workers.dev/atelier/:splat 301

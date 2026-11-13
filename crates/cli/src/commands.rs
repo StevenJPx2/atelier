@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use atelier_core::{CiFile, Repo};
+use atelier_core::{CiFile, Pipeline, Repo};
 use atelier_git::{Repository, WorkingTree};
 use atelier_github::GitHub;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
@@ -43,11 +43,11 @@ const RELEASE_COMMIT: Option<&str> = option_env!("ATELIER_COMMIT");
 ///
 /// The project's settings are not valid, its tracker refuses, or a CI file
 /// cannot be written.
-pub fn init(_paths: &Paths, path: &Path) -> Result<()> {
+pub fn init(paths: &Paths, path: &Path) -> Result<()> {
     let (local, entry) = here(path)?;
     let resolved = config::resolve(&entry, &local)?;
     let repo = Repo(entry.repo.clone());
-    let build = Build::new();
+    let build = Build::new(paths);
     let forge = build.forge(&resolved.forge)?;
 
     match RELEASE_COMMIT {
@@ -146,14 +146,22 @@ pub fn status(paths: &Paths) -> Result<()> {
         println!("{}  {}", entry.repo, local.path().display());
 
         if local.exists() {
-            let resolved = config::resolve(&entry, &local)
-                .and_then(|resolved| Build::new().checks(&resolved).map(|_| resolved));
+            let build = Build::new(paths);
+            let resolved = config::resolve(&entry, &local).and_then(|resolved| {
+                build.checks(&resolved)?;
+                let tree = local.tree(&resolved.project.base)?;
+                let pipelines = build.pipelines(&resolved, &tree)?;
+
+                Ok((resolved, pipelines))
+            });
 
             match resolved {
-                Ok(resolved) => {
+                Ok((resolved, pipelines)) => {
                     for (name, value, origin) in &resolved.shown {
                         println!("  {name:<11} {value:<24} {origin}");
                     }
+
+                    show(&pipelines, &resolved.pipelines);
                 }
                 Err(error) => println!("  settings: {error:#}"),
             }
@@ -185,6 +193,30 @@ pub fn status(paths: &Paths) -> Result<()> {
 
     Ok(())
 }
+/// Each pipeline, where it came from, and each step's kind, with the
+/// plugin a role's kind resolved to, such as `forge.checks → github.checks`.
+fn show(pipelines: &[Pipeline], written: &[config::Written]) {
+    for (pipeline, written) in pipelines.iter().zip(written) {
+        println!(
+            "  {:<11} {:<24} {}",
+            "pipeline",
+            pipeline.name(),
+            written.origin
+        );
+
+        for step in pipeline.steps() {
+            let resolved = step.resolved();
+            let kind = if resolved == step.uses {
+                resolved
+            } else {
+                format!("{} → {resolved}", step.uses)
+            };
+
+            println!("    {:<9} {kind}", step.id);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

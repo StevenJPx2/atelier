@@ -1,0 +1,28 @@
+# The built-in build pipeline: an issue's builder, from a worktree to a
+# merged pull request. A project that writes [pipeline.build] replaces it.
+
+[[pipeline.build.step]]
+id = "worktree"
+uses = "git.worktree"
+
+[[pipeline.build.step]]
+id = "builder"
+uses = "agent.session"
+brief = "builder"
+# `atelier finish opened` once the draft pull request is open
+outcomes = ["opened", "nothing"]
+
+[[pipeline.build.step]]
+id = "checks"
+uses = "forge.checks"
+after = { builder = "opened" }
+rounds = 5
+restart = true
+
+[[pipeline.build.step]]
+id = "ready"
+uses = "forge.ready"
+
+[[pipeline.build.step]]
+id = "merge"
+uses = "forge.merge"

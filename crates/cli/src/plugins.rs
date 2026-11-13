@@ -2,17 +2,23 @@
 //! them.
 
 use atelier_commands::Commands;
-use atelier_core::{Agent, Checks, Filter, Forge, Plugin, Plugins, Registry, Source, Tracker};
+use atelier_core::{
+    Agent, Checks, Filter, Forge, Pipeline, Plugin, Plugins, Registry, Source, Tracker, Tree,
+};
 use atelier_git::Git;
 use atelier_github::GitHub;
 use atelier_opencode::OpenCode;
 use color_eyre::eyre::{Result, bail, eyre};
 
+use crate::command_step::Atelier;
 use crate::config::{CONFIG, Resolved};
+use crate::paths::Paths;
 
 /// One instance of each plugin crate in the build.
 pub struct Build {
+    atelier: Atelier,
     commands: Commands,
+    git: Git,
     github: GitHub,
     opencode: OpenCode,
 }
@@ -25,12 +31,20 @@ pub struct Built<'a> {
 }
 
 impl Build {
-    pub fn new() -> Self {
+    /// The build's plugins, with worktrees and their hooks under `paths`.
+    pub fn new(paths: &Paths) -> Self {
         Self {
+            atelier: Atelier,
             commands: Commands,
+            git: Git::new(paths.worktrees()).with_hooks(paths.hooks()),
             github: GitHub::new(),
             opencode: OpenCode::new(),
         }
+    }
+
+    /// Worktrees and branches.
+    pub const fn git(&self) -> &Git {
+        &self.git
     }
 
     /// The forge plugin named `name`.
@@ -43,7 +57,13 @@ impl Build {
     }
 
     fn registry(&self) -> Registry<'_> {
-        let list: [&dyn Plugin; 3] = [&self.commands, &self.github, &self.opencode];
+        let list: [&dyn Plugin; 5] = [
+            &self.atelier,
+            &self.commands,
+            &self.git,
+            &self.github,
+            &self.opencode,
+        ];
         Registry::new(&list)
     }
 
@@ -77,6 +97,31 @@ impl Build {
         }
 
         Ok(built)
+    }
+
+    /// The project's pipelines, each checked against the kinds of step its
+    /// plugins offer; `tree` is the project at `origin/<base>`.
+    ///
+    /// # Errors
+    ///
+    /// The first pipeline atelier cannot run, with its name and why.
+    pub fn pipelines(&self, resolved: &Resolved, tree: &dyn Tree) -> Result<Vec<Pipeline>> {
+        let registry = self.registry();
+        let trackers: Vec<&str> = resolved
+            .trackers
+            .iter()
+            .map(|tracker| tracker.plugin.as_str())
+            .collect();
+        let kinds = registry.kinds(resolved.agent.as_deref(), &resolved.forge, &trackers);
+
+        resolved
+            .pipelines
+            .iter()
+            .map(|written| {
+                Pipeline::read(&written.name, &written.steps, &kinds, tree)
+                    .map_err(|error| eyre!("{CONFIG}: pipeline {error}"))
+            })
+            .collect()
     }
 
     /// The project's trackers, forge and agent, by the names it resolved.

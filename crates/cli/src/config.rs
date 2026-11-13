@@ -38,6 +38,8 @@ struct File {
     poll: Option<u64>,
     #[serde(default)]
     paths: BTreeMap<String, PathFile>,
+    #[serde(default)]
+    pipeline: BTreeMap<String, PipelineFile>,
     /// Every other key: each must be a named checks plugin's own table,
     /// such as `[commands]`.
     #[serde(flatten)]
@@ -51,6 +53,26 @@ struct PathFile {
     checks: Option<Vec<String>>,
     #[serde(default)]
     skip: Vec<String>,
+}
+
+/// One `[pipeline.<name>]`, as written: its steps, in order.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PipelineFile {
+    #[serde(default)]
+    step: Vec<toml::Table>,
+}
+
+/// The built-in `build` pipeline, written in the same terms.
+const BUILD: &str = include_str!("build.toml");
+
+/// A pipeline as the config writes it, checked against the project's
+/// plugins once they are known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Written {
+    pub name: String,
+    pub steps: Vec<Settings>,
+    pub origin: Origin,
 }
 
 /// One of a project's named checks plugins, with its own table.
@@ -82,6 +104,9 @@ pub struct Resolved {
     pub trackers: Vec<TrackerSpec>,
     pub checks: Vec<CheckSpec>,
     pub overrides: Overrides,
+    /// The built-in `build`, unless the config writes its own, then each
+    /// pipeline the config writes, by name.
+    pub pipelines: Vec<Written>,
     pub forge: String,
     pub agent: Option<String>,
     pub poll: Duration,
@@ -150,6 +175,7 @@ fn build(
     refuse_unbuilt("stage", &file.stages)?;
     let checks = checks(&file)?;
     let overrides = overrides(&file.paths)?;
+    let pipelines = pipelines(&file.pipeline)?;
 
     let mut limits = file.limits.clone();
     let red_rounds = limits.remove("red_rounds");
@@ -211,6 +237,7 @@ fn build(
         trackers,
         checks,
         overrides,
+        pipelines,
         forge,
         agent: file.agent,
         poll: Duration::from_secs(poll),
@@ -248,6 +275,38 @@ fn checks(file: &File) -> Result<Vec<CheckSpec>> {
             })
         })
         .collect()
+}
+
+/// The built-in `build` first, unless the config writes `[pipeline.build]`,
+/// then each pipeline the config writes, by name.
+fn pipelines(written: &BTreeMap<String, PipelineFile>) -> Result<Vec<Written>> {
+    let builtin: File = toml::from_str(BUILD).wrap_err("the built-in build pipeline")?;
+    let mut all: Vec<Written> = Vec::new();
+
+    let ours = builtin
+        .pipeline
+        .into_iter()
+        .filter(|(name, _)| !written.contains_key(name))
+        .map(|entry| (entry, Origin::Found));
+    let theirs = written
+        .iter()
+        .map(|(name, file)| ((name.clone(), file.clone()), Origin::Set));
+
+    for ((name, file), origin) in ours.chain(theirs) {
+        let steps = file
+            .step
+            .into_iter()
+            .map(|table| settings(table).wrap_err_with(|| format!("{CONFIG}: pipeline.{name}")))
+            .collect::<Result<_>>()?;
+
+        all.push(Written {
+            name,
+            steps,
+            origin,
+        });
+    }
+
+    Ok(all)
 }
 
 /// `[paths."…"]`, each a folder inside the project, or `.` for all of it.

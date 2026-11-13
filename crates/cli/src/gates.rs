@@ -11,6 +11,7 @@ use color_eyre::eyre::{Result, bail};
 
 use crate::commands::here;
 use crate::config::{self, Resolved};
+use crate::paths::Paths;
 use crate::plugins::Build;
 
 /// The longest one gate or fix may run, setup included.
@@ -50,9 +51,9 @@ fn base(resolved: &Resolved, diff: Option<&str>) -> String {
 /// # Errors
 ///
 /// The checkout, its settings or its diff cannot be read.
-pub fn list(path: &Path, diff: Option<&str>, json: bool) -> Result<()> {
+pub fn list(paths: &Paths, path: &Path, diff: Option<&str>, json: bool) -> Result<()> {
     let (tree, resolved) = project(path)?;
-    let build = Build::new();
+    let build = Build::new(paths);
     let checks = build.checks(&resolved)?;
     let changed = diff.map(|base| tree.changed(base)).transpose()?;
     let planned = atelier_core::gates(
@@ -99,9 +100,9 @@ pub struct Selection<'a> {
 ///
 /// The checkout, its settings or its diff cannot be read, or the named
 /// gate is not in that root.
-pub fn check(path: &Path, selection: &Selection<'_>) -> Result<ExitCode> {
+pub fn check(paths: &Paths, path: &Path, selection: &Selection<'_>) -> Result<ExitCode> {
     let (tree, resolved) = project(path)?;
-    let build = Build::new();
+    let build = Build::new(paths);
     let checks = build.checks(&resolved)?;
     let plugins = refs(&checks);
     let base = base(&resolved, selection.diff);
@@ -173,9 +174,9 @@ pub fn check(path: &Path, selection: &Selection<'_>) -> Result<ExitCode> {
 /// # Errors
 ///
 /// The checkout or its settings cannot be read, or git cannot stage.
-pub fn fix(path: &Path, staged: bool, files: &[String]) -> Result<ExitCode> {
+pub fn fix(paths: &Paths, path: &Path, staged: bool, files: &[String]) -> Result<ExitCode> {
     let (tree, resolved) = project(path)?;
-    let build = Build::new();
+    let build = Build::new(paths);
     let checks = build.checks(&resolved)?;
     let base = base(&resolved, None);
     let stage = staged.then(|| tree.staged()).transpose()?;

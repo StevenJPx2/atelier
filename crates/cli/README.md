@@ -27,11 +27,18 @@ atelier fix --staged
 StevenJPx2/chauffeur  /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur.git
   base        v2                       set
   ...
+  pipeline    build                    found
+    worktree  git.worktree
+    builder   agent.session → opencode.session
+    checks    forge.checks → github.checks
+    ...
   github#6    Open { rounds: 1 }       issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
   github#12   Building                 issue-12-fix-the-dead-link  ses_…  -
 ```
 
-Each issue shows its phase, branch, session and pull request (`-` when it
+Each pipeline shows its steps, each with its kind and the plugin a role's
+kind resolved to; a pipeline atelier cannot run shows instead of the
+settings, with its name and why. Each issue shows its phase, branch, session and pull request (`-` when it
 has none). `status` reads only `state.json`: the pull request's number is
 the one the daemon's last poll saw, so it makes no GitHub call.
 
@@ -54,6 +61,8 @@ flowchart LR
 | `paths.rs`         | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
 | `projects.rs`      | `projects.toml`: your projects and your own filters                  |
 | `config.rs`        | `.atelier/config.toml` from `origin`, what is found, what is set     |
+| `build.toml`       | The built-in `build` pipeline, unless the config writes its own      |
+| `command_step.rs`  | `atelier`, the plugin of atelier's own kind of step, `command`       |
 | `plugins.rs`       | The plugins in the build, and each project's choice of them          |
 | `state.rs`         | `state.json`, written whole and renamed into place                   |
 | `log.rs`           | One line per event, with a UTC time                                  |

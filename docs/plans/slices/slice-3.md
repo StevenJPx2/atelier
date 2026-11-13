@@ -275,7 +275,9 @@ pub enum Outcomes {
 }
 ```
 
-`git` is a plugin of its own, offering `worktree`. GitHub offers `checks`,
+`git` is a plugin of its own, offering `worktree`. `atelier` is the CLI's
+plugin of core's own kinds, offering `command`, which takes `run` and
+`timeout`, its limit in seconds: 600 unless set, at most a day. GitHub offers `checks`,
 `ready` and `merge`, none with settings. OpenCode offers `session`, which
 takes `prompt`, a file on the base branch whose text it keeps under `text`,
 or `brief = "builder"`. A prompt is read from `origin/<base>` through a
@@ -286,6 +288,7 @@ impl Plugin for Git {}
 impl Step for Git {}
 impl Step for GitHub {}
 impl Step for OpenCode {}
+impl Step for Atelier {}
 
 impl Repository {
     pub fn tree(&self, branch: &str) -> Result<BranchTree, PluginError>;
@@ -355,6 +358,46 @@ after = ["critic", "recording"]
 
 `builder` settling `nothing` leaves no step able to run, so the run is Done: the
 issue closes as not planned, with the builder's reason.
+
+#### Structure
+
+The built-in `build` is `crates/cli/src/build.toml`, read as any config is.
+The config keeps each pipeline as written, the built-in `build` first unless
+`[pipeline.build]` replaces it, then each written pipeline by name. Each poll
+and `atelier status` check them against the project's plugins and its files
+on `origin/<base>`; a pipeline atelier cannot run refuses the project.
+
+```rust
+pub struct Written {
+    pub name: String,
+    pub steps: Vec<Settings>,
+    pub origin: Origin,
+}
+
+pub struct Resolved {
+    pub pipelines: Vec<Written>,
+    …
+}
+
+impl Build {
+    pub fn new(paths: &Paths) -> Self;
+    pub const fn git(&self) -> &Git;
+    pub fn pipelines(&self, resolved: &Resolved, tree: &dyn Tree)
+        -> Result<Vec<Pipeline>>;
+}
+```
+
+`atelier status` shows each pipeline, where it came from, and each step's
+kind with the plugin a role's kind resolved to:
+
+```text
+  pipeline    build                    found
+    worktree  git.worktree
+    builder   agent.session → opencode.session
+    checks    forge.checks → github.checks
+    ready     forge.ready → github.ready
+    merge     forge.merge → github.merge
+```
 
 ### Triggers and runs
 

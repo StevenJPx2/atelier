@@ -2,6 +2,7 @@
 //! stand-ins for GitHub and `OpenCode` built from their captured replies.
 
 mod gates;
+mod pipelines;
 mod recovery;
 mod sandbox;
 

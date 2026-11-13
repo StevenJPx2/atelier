@@ -264,6 +264,21 @@ fn a_claim_that_fails_for_good_blocks_the_run() {
 }
 
 #[test]
+fn a_fresh_pass_keeps_each_steps_own_previous_session() {
+    let (world, state) = building();
+    let project = world.project();
+    let mut record = state.runs[&key()].clone();
+    let previous = record.steps[1].session.clone();
+
+    record.begin(&project.pipelines[0]);
+
+    assert!(previous.is_some());
+    assert_eq!(record.steps[1].session, previous);
+    assert_eq!(record.steps[0].session, None);
+    assert_eq!(record.steps[2].session, None);
+}
+
+#[test]
 fn a_blocked_run_requested_again_continues_on_its_branch() {
     let world = World::with_issue("12", "Fix the dead link", &[Mark::Build]);
     let project = world.project();

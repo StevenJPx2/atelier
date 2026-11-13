@@ -69,6 +69,14 @@ impl Step for OpenCode {
             }
             _ => run.brief.clone(),
         };
+        let brief = brief.with(format!(
+            "You are the `{}` step of this run. Your outcomes are {}, or failed. \
+             When finished, run `atelier finish <outcome> \"<why>\" --step {}` \
+             in this worktree. Name only your own step; explain what you checked.",
+            step.id,
+            step.outcomes.join(", "),
+            step.id,
+        ));
 
         Ok(Started::Session(Agent::start(
             self,

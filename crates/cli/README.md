@@ -54,25 +54,27 @@ flowchart LR
     P1 -- "observe, act" --> Plugins["github, opencode, git"]
 ```
 
-| File               | Holds                                                                |
-| ------------------ | -------------------------------------------------------------------- |
-| `main.rs`          | The commands                                                         |
-| `commands.rs`      | `init`, `add` and `status`                                           |
-| `gates.rs`         | `gates`, `check` and `fix`, in a checkout                            |
-| `hook.rs`          | The pre-commit hook builders' worktrees use                          |
-| `clone.rs`         | atelier's own bare clone of each project, made or finished when used |
-| `paths.rs`         | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
-| `projects.rs`      | `projects.toml`: your projects and your own filters                  |
-| `config.rs`        | `.atelier/config.toml` from `origin`, what is found, what is set     |
-| `build.toml`       | The built-in `build` pipeline, unless the config writes its own      |
-| `command_step/`    | `atelier`, the plugin of atelier's own kind of step, `command`       |
-| `plugins.rs`       | The plugins in the build, and each project's choice of them          |
-| `state/`           | `state.json`, written whole and renamed; an earlier rc's file read   |
-| `log.rs`           | One line per event, with a UTC time                                  |
-| `daemon/mod.rs`    | The supervisor: rereads `projects.toml` every 5 s                    |
-| `daemon/lock.rs`   | The lock that lets one daemon run, holding its process id            |
-| `daemon/poll.rs`   | One project's polls: interval, soon after acting, back-off           |
-| `daemon/writer.rs` | The one thread that writes `state.json`                              |
+| File                   | Holds                                                                |
+| ---------------------- | -------------------------------------------------------------------- |
+| `main.rs`              | The commands                                                         |
+| `commands.rs`          | `init`, `add` and `status`                                           |
+| `finish.rs`, `stop.rs` | Find a working run and leave a request for its worker                |
+| `requests/`            | Bounded, atomic run-request files                                    |
+| `gates.rs`             | `gates`, `check` and `fix`, in a checkout                            |
+| `hook.rs`              | The pre-commit hook builders' worktrees use                          |
+| `clone.rs`             | atelier's own bare clone of each project, made or finished when used |
+| `paths.rs`             | Where your projects, state, clones and worktrees live (XDG, or `~/`) |
+| `projects.rs`          | `projects.toml`: your projects and your own filters                  |
+| `config.rs`            | `.atelier/config.toml` from `origin`, what is found, what is set     |
+| `build.toml`           | The built-in `build` pipeline, unless the config writes its own      |
+| `command_step/`        | `atelier`, the plugin of atelier's own kind of step, `command`       |
+| `plugins.rs`           | The plugins in the build, and each project's choice of them          |
+| `state/`               | `state.json`, written whole and renamed; an earlier rc's file read   |
+| `log.rs`               | One line per event, with a UTC time                                  |
+| `daemon/mod.rs`        | The supervisor: rereads `projects.toml` every 5 s                    |
+| `daemon/lock.rs`       | The lock that lets one daemon run, holding its process id            |
+| `daemon/poll.rs`       | One project's polls: interval, soon after acting, back-off           |
+| `daemon/writer.rs`     | The one thread that writes `state.json`                              |
 
 - **Its own clones.** The daemon reads each project's bare clone under
   `~/.local/share/atelier/clones`, never your checkout, so it needs no

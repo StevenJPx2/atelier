@@ -25,8 +25,8 @@ pub use pipeline::{
 };
 pub use plugin::{MakeChecks, MakeTracker, MissingPlugin, On, Plugin, Registry, Role};
 pub use poll::{
-    Move, Observation, Plugins, Project, Record, Report, Source, State, StepRecord, Watched, act,
-    observe,
+    Command, Move, Observation, Plugins, Project, Record, Report, Request, Source, State,
+    StepRecord, Watched, act, observe,
 };
 pub use roles::{
     Agent, CiFile, Failure, Filter, Forge, Issue, IssueKey, Kind, Listing, Observed, Outcome,

@@ -78,6 +78,10 @@ impl Step for Atelier {
         Ok(Started::Nothing)
     }
 
+    fn stop(&self, folder: &std::path::Path) -> Result<(), PluginError> {
+        run::stop(folder)
+    }
+
     /// How the command ended, once it has.
     fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
         Ok(match run::observe(run.folder, &step.settings)? {

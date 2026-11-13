@@ -53,6 +53,7 @@ pub enum Event {
         step: u8,
     },
     Changed,
+    Stop,
     Unmarked,
     IssueClosed,
     LostTrack,

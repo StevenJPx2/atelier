@@ -18,6 +18,8 @@ pub struct State {
 /// between actions resumes where it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
+    /// The pass of its pipeline; requests for an older pass are ignored.
+    pub generation: u64,
     pub pipeline: String,
     pub phase: Phase,
     /// Each step's status and failed rounds, by its position.
@@ -37,6 +39,8 @@ pub struct Record {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepRecord {
     pub id: String,
+    /// The plugin that started it, kept even if its pipeline is removed.
+    pub plugin: String,
     pub session: Option<Session>,
     pub why: Option<String>,
 }
@@ -49,6 +53,7 @@ impl Record {
     #[must_use]
     pub fn new(key: &IssueKey, title: &str, pipeline: &str) -> Self {
         Self {
+            generation: 0,
             pipeline: pipeline.to_owned(),
             phase: Phase::Untracked,
             progress: Progress::default(),
@@ -96,6 +101,7 @@ impl Record {
     /// session, which its next start replaces.
     pub fn begin(&mut self, pipeline: &Pipeline) {
         let last = std::mem::take(&mut self.steps);
+        self.generation = self.generation.saturating_add(1);
 
         pipeline.name().clone_into(&mut self.pipeline);
         self.steps = pipeline
@@ -103,6 +109,7 @@ impl Record {
             .iter()
             .map(|step| StepRecord {
                 id: step.id.clone(),
+                plugin: step.plugin.to_owned(),
                 session: last
                     .iter()
                     .find(|kept| kept.id == step.id)

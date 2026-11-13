@@ -5,13 +5,16 @@ mod command_step;
 mod commands;
 mod config;
 mod daemon;
+mod finish;
 mod gates;
 mod hook;
 mod log;
 mod paths;
 mod plugins;
 mod projects;
+mod requests;
 mod state;
+mod stop;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -46,6 +49,26 @@ enum Command {
     Daemon,
     /// Each project's settings, and each issue atelier is following.
     Status,
+    /// Settle a running agent step in this worktree.
+    Finish {
+        /// An outcome the step declares, such as found or clean.
+        outcome: String,
+        /// Why it settled with this outcome.
+        why: String,
+        /// The step's id, required when the outcome is ambiguous.
+        #[arg(long)]
+        step: Option<String>,
+        /// A folder in the run's worktree.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Stop a working run, such as "security-audit github#40".
+    Stop {
+        run: String,
+        /// The project, required when more than one has that run key.
+        #[arg(long)]
+        repo: Option<String>,
+    },
     /// Each root of the checkout and its gates.
     Gates {
         /// Only the roots the changes since this base touch.
@@ -111,6 +134,15 @@ fn main() -> Result<ExitCode> {
         Command::Add { repo } => commands::add(&paths, &repo)?,
         Command::Daemon => daemon::run(&paths)?,
         Command::Status => commands::status(&paths)?,
+        Command::Finish {
+            outcome,
+            why,
+            step,
+            path,
+        } => {
+            finish::run(&paths, &path, &outcome, &why, step.as_deref())?;
+        }
+        Command::Stop { run, repo } => stop::run(&paths, &run, repo.as_deref())?,
         Command::Gates { diff, json, path } => gates::list(&paths, &path, diff.as_deref(), json)?,
         Command::Check {
             diff,

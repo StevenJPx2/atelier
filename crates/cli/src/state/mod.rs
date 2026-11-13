@@ -30,6 +30,8 @@ struct ProjectFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RunFile {
+    #[serde(default)]
+    generation: u64,
     pipeline: String,
     tracker: String,
     id: String,
@@ -45,6 +47,8 @@ struct RunFile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StepFile {
     id: String,
+    #[serde(default)]
+    plugin: String,
     status: StatusFile,
     failed: u8,
     session: Option<SessionFile>,
@@ -218,6 +222,7 @@ impl RunFile {
             .take(MAX_STEPS)
             .map(|step| StepRecord {
                 id: step.id,
+                plugin: step.plugin,
                 session: step.session.map(|session| Session {
                     id: session.id,
                     title: session.title,
@@ -226,6 +231,7 @@ impl RunFile {
             });
 
         let record = Record {
+            generation: self.generation,
             pipeline: self.pipeline,
             phase: self.phase.into(),
             progress,
@@ -248,6 +254,7 @@ impl RunFile {
             .zip(progress)
             .map(|(step, (status, failed))| StepFile {
                 id: step.id.clone(),
+                plugin: step.plugin.clone(),
                 status: (*status).into(),
                 failed,
                 session: step.session.as_ref().map(|session| SessionFile {
@@ -258,6 +265,7 @@ impl RunFile {
             });
 
         Self {
+            generation: record.generation,
             pipeline: record.pipeline.clone(),
             tracker: key.tracker.clone(),
             id: key.id.clone(),
@@ -443,6 +451,7 @@ mod tests {
         progress.failed[3] = 2;
         let steps = ["worktree", "builder", "checks", "ready"].map(|id| StepRecord {
             id: id.into(),
+            plugin: "atelier".into(),
             session: None,
             why: None,
         });

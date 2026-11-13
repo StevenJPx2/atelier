@@ -180,11 +180,19 @@ fn a_session_starts_with_its_prompt_or_the_builder_s_brief() {
     assert_eq!(made.title, "#12 Fix the dead link [audit]");
     assert_eq!(body(&prompted.calls()[1])["title"], made.title);
     assert_eq!(body(&builder.calls()[1])["title"], "#12 Fix the dead link");
-    assert_eq!(
-        body(&prompted.calls()[2])["text"],
-        "Audit the dependencies."
-    );
-    assert_eq!(body(&builder.calls()[2])["text"], brief().text());
+    let text = body(&prompted.calls()[2])["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(text.starts_with("Audit the dependencies."));
+    assert!(text.contains("atelier finish <outcome> \"<why>\" --step audit"));
+    assert!(text.contains("found, clean, or failed"));
+    let builder_text = body(&builder.calls()[2])["text"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(builder_text.starts_with(&brief().text()));
+    assert!(builder_text.contains("--step audit"));
     assert!(matches!(built, Ok(Started::Session(_))));
     assert!(homeless.unwrap_err().is_permanent());
 }

@@ -112,6 +112,18 @@ pub trait Step {
     /// The plugin's failure; a permanent one blocks the run.
     fn start(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Started, PluginError>;
 
+    /// Releases resources the step kept in its folder, such as a
+    /// command's process group, on every way out of the run. Safe when no
+    /// start made anything, or cleanup already ran. Resident sessions are
+    /// interrupted through the agent role as well.
+    ///
+    /// # Errors
+    ///
+    /// The plugin's failure; cleanup stays pending and is retried.
+    fn stop(&self, _: &std::path::Path) -> Result<(), PluginError> {
+        Ok(())
+    }
+
     /// What a poll sees of the step: whether it settled, failed a round,
     /// or, once settled, runs again.
     ///

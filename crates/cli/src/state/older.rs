@@ -88,6 +88,7 @@ impl IssueFile {
         let (phase, progress) = self.phase.run();
         let steps = BUILD.map(|id| StepRecord {
             id: id.to_owned(),
+            plugin: String::new(),
             session: None,
             why: None,
         });

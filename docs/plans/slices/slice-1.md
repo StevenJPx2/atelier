@@ -71,7 +71,7 @@ let (next, actions) = step(Phase::Open { rounds: 4 }, Event::RoundFailed, &pipel
 let observation = observe(&project, &plugins, &state)?;
 
 let report = act(&observation, &mut state, &project, &plugins, &mut save)?;
-// report.steps → [Step { key: github#12, from: Untracked, to: Claiming }, …]
+// report.moves → [Move { key: github#12, from: Untracked, to: Claiming }, …]
 ```
 
 #### Structure
@@ -417,9 +417,9 @@ pub struct Observation {
 
 pub struct Observed { pub issue: Issue, pub seen: Seen }
 
-pub struct Report { pub steps: Vec<Step>, pub failures: Vec<(IssueKey, PluginError)> }
+pub struct Report { pub moves: Vec<Move>, pub failures: Vec<(IssueKey, PluginError)> }
 
-pub struct Step { pub key: IssueKey, pub from: Phase, pub to: Phase }
+pub struct Move { pub key: IssueKey, pub from: Phase, pub to: Phase }
 
 pub fn observe(
     project: &Project,

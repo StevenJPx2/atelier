@@ -59,7 +59,7 @@ fn run(entry: &Entry, paths: &Paths, writer: &Writer, stop: &AtomicBool) {
             Ok((report, poll)) => {
                 failures = 0;
                 tell(&entry.repo, &report);
-                if report.steps.is_empty() { poll } else { SOON }
+                if report.moves.is_empty() { poll } else { SOON }
             }
             Err(error) => {
                 failures = failures.saturating_add(1);
@@ -93,7 +93,7 @@ fn once(
 }
 
 fn tell(repo: &str, report: &Report) {
-    for step in &report.steps {
+    for step in &report.moves {
         log(
             repo,
             &format!("{} {:?} → {:?}", step.key, step.from, step.to),

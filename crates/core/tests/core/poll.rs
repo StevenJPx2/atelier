@@ -349,7 +349,7 @@ fn an_unmarked_issue_is_left_alone() {
 
     let report = world.poll(&world::project(&[]), &mut state);
 
-    assert_eq!(report.steps, []);
+    assert_eq!(report.moves, []);
     assert!(state.issues.is_empty());
     assert_eq!(*world.changes.borrow(), 0);
 }

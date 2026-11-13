@@ -31,7 +31,7 @@ sequenceDiagram
 let observation = observe(&project, &plugins, &state)?;
 
 let report = act(&observation, &mut state, &project, &plugins, &mut |state| store(state))?;
-// report.steps → [Step { key: github#12, from: Untracked, to: Claiming }, …]
+// report.moves → [Move { key: github#12, from: Untracked, to: Claiming }, …]
 ```
 
 - **Resuming.** A step's actions wait in the issue's `pending` list, and each

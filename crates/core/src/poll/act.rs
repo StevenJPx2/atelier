@@ -16,13 +16,13 @@ const MAX_STEPS: usize = 32;
 /// What one poll did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Report {
-    pub steps: Vec<Step>,
+    pub moves: Vec<Move>,
     pub failures: Vec<(IssueKey, PluginError)>,
 }
 
 /// One issue's move from one phase to the next.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Step {
+pub struct Move {
     pub key: IssueKey,
     pub from: Phase,
     pub to: Phase,
@@ -56,7 +56,7 @@ pub fn act<E>(
     let mut report = Report::default();
 
     for (key, observed) in &observation.issues {
-        if let Err(error) = drive(observed, state, &context, save, &mut report.steps)? {
+        if let Err(error) = drive(observed, state, &context, save, &mut report.moves)? {
             report.failures.push((key.clone(), error));
         }
     }
@@ -74,7 +74,7 @@ fn drive<E>(
     state: &mut State,
     context: &Context<'_, '_>,
     save: &mut impl FnMut(&State) -> Result<(), E>,
-    steps: &mut Vec<Step>,
+    moves: &mut Vec<Move>,
 ) -> Result<Result<(), PluginError>, E> {
     let key = &observed.issue.key;
     let mut seen = observed.seen;
@@ -119,7 +119,7 @@ fn drive<E>(
         record.phase = next;
         record.pending = actions;
         save(state)?;
-        steps.push(Step {
+        moves.push(Move {
             key: key.clone(),
             from: phase,
             to: next,

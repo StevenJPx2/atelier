@@ -6,7 +6,7 @@
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview",
-    "deploy": "vitepress build && cf deploy"
+    "deploy": "cf deploy"
   },
   "devDependencies": {
     "cf": "1.0.0-beta.27",

@@ -2,9 +2,12 @@
 
 The documentation site: every Markdown file in the repository, rendered with
 [VitePress](https://vitepress.dev), with Mermaid diagrams drawn and local
-search. It is deployed to Cloudflare as the Worker `atelier-docs` from
-`main`, at
-[atelier-docs.stevenjpx2.workers.dev](https://atelier-docs.stevenjpx2.workers.dev).
+search. Readers find it in the Workhorse hub, at
+[/atelier/](https://workhorse-docs.stevenjpx2.workers.dev/atelier/), which
+pulls these pages from `main` when it builds. Here it runs locally and checks
+every pull request. The Worker `atelier-docs`, at
+[atelier-docs.stevenjpx2.workers.dev](https://atelier-docs.stevenjpx2.workers.dev),
+redirects each path to the same page in the hub.
 
 | Path                           | Holds                                                                                                       |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -12,12 +15,13 @@ search. It is deployed to Cloudflare as the Worker `atelier-docs` from
 | `.vitepress/theme/index.ts`    | Draws `mermaid` blocks in the site's font and colours, again when the page or the colour scheme changes     |
 | `.vitepress/theme/mermaid.css` | How a diagram sits in its column, and opened full screen                                                    |
 | `cloudflare.config.ts`         | The Worker and its account; `wrangler.config.ts` names the folder it serves                                 |
+| `redirect/_redirects`          | The Worker's one rule: every path to the same path under the hub's `/atelier/`                              |
 
 - **Run:** `bun install`, then `bun run dev`.
 - **Build:** `bun run build` writes `.vitepress/dist/`, and fails on a dead
   link.
-- **Deploy:** `.github/workflows/docs.yml` builds every pull request and
-  deploys each push to `main` with `CLOUDFLARE_API_TOKEN`.
+- **Deploy:** `.github/workflows/docs.yml` builds every pull request and,
+  on each push to `main`, deploys the redirect with `CLOUDFLARE_API_TOKEN`.
 - A new Markdown file anywhere in the repository appears in the sidebar on
   the next build; nothing here lists pages by hand.
 - **Diagrams** use Mermaid's `base` theme with the site's font and colours,

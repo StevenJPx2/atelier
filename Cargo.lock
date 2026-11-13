@@ -101,6 +101,9 @@ dependencies = [
 [[package]]
 name = "atelier-core"
 version = "0.1.0-rc.8"
+dependencies = [
+ "rungs",
+]
 
 [[package]]
 name = "atelier-git"
@@ -344,6 +347,11 @@ checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "rungs"
+version = "0.1.0"
+source = "git+https://github.com/StevenJPx2/rungs?tag=v0.1.0#c5e7e3c9782d51ce1df244fcabb51f9bcffa2f54"
 
 [[package]]
 name = "rustc-demangle"

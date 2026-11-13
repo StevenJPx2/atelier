@@ -247,6 +247,52 @@ fn a_step_with_no_needs_written_waits_for_the_one_before_it_to_pass() {
 }
 
 #[test]
+fn a_pipeline_lowers_to_a_rungs_plan_by_position() {
+    use atelier_core::rungs::{Need as Wait, Outcome};
+
+    let pipeline = read(&security_audit()).unwrap();
+    let plan = pipeline.plan();
+    let audit = pipeline.step("audit").unwrap();
+    let any: Vec<Wait> = plan.after_any(3).unwrap().collect();
+
+    assert_eq!(plan.steps(), 4);
+    assert_eq!(plan.depth(), 3);
+    assert_eq!(plan.outcomes(2), Some(2));
+    assert_eq!(plan.attempts(1), Some(1));
+    assert_eq!(audit.outcome("clean"), Some(Outcome(1)));
+    assert_eq!(audit.outcome("failed"), Some(Outcome::FAILED));
+    assert_eq!(audit.outcome("lost"), None);
+    assert_eq!(audit.outcome_name(Outcome(0)), Some("found"));
+    assert_eq!(audit.outcome_name(Outcome::FAILED), Some("failed"));
+    assert_eq!(audit.outcome_name(Outcome(2)), None);
+    assert_eq!(
+        any,
+        [
+            Wait::outcome(1, [Outcome::FAILED]),
+            Wait::outcome(2, [Outcome(0)])
+        ]
+    );
+    assert_eq!(plan.after(3).unwrap().count(), 0);
+
+    let mut run = plan.start();
+    assert_eq!(run.advance(), [0]);
+    run.settle(0, Outcome(0)).unwrap();
+    assert_eq!(run.advance(), [1, 2]);
+}
+
+#[test]
+fn rounds_are_a_step_s_attempts() {
+    let pipeline = read(&[
+        step("worktree", "git.worktree", &[]),
+        step("checks", "forge.checks", &[("rounds", Setting::Number(5))]),
+    ])
+    .unwrap();
+
+    assert_eq!(pipeline.plan().attempts(1), Some(5));
+    assert_eq!(pipeline.plan().attempts(0), Some(1));
+}
+
+#[test]
 fn a_pipeline_of_eight_steps_is_read_and_a_kind_s_own_outcomes_may_be_written() {
     let mut steps = vec![step(
         "s0",

@@ -15,3 +15,5 @@ allow-wildcard-paths = true
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# The step machine, shared with Chauffeur, by its tag.
+allow-git = ["https://github.com/StevenJPx2/rungs"]

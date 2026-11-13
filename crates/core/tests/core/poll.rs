@@ -583,6 +583,36 @@ fn a_run_whose_pipeline_changed_under_it_is_blocked() {
 }
 
 #[test]
+fn removing_a_pipeline_blocks_its_running_or_claiming_run() {
+    for before in [Phase::Running, Phase::Claiming] {
+        let world = World::with_issue("12", "Fix the dead link", &[Mark::Working]);
+        let mut state = State::default();
+        let mut record = running(&["worktree", "builder", "checks", "ready", "merge"]);
+        record.phase = before;
+        record.pipeline = "removed".into();
+        state.runs.insert(key(), record);
+
+        let report = world.poll(&world.project(), &mut state);
+
+        assert_eq!(phase(&state), Phase::Blocked(Reason::Changed), "{before:?}");
+        assert_eq!(report.failures, []);
+    }
+}
+
+#[test]
+fn saved_progress_the_pipeline_cannot_resume_blocks_its_run() {
+    let world = World::with_issue("12", "Fix the dead link", &[Mark::Working]);
+    let mut state = State::default();
+    let mut record = running(&["worktree", "builder", "checks", "ready", "merge"]);
+    record.progress.status[0] = Status::Pending;
+    state.runs.insert(key(), record);
+
+    world.poll(&world.project(), &mut state);
+
+    assert_eq!(phase(&state), Phase::Blocked(Reason::Changed));
+}
+
+#[test]
 fn the_filter_narrows_requests_but_not_lost_track() {
     let world = World::with_issue("12", "Fix the dead link", &[Mark::Build]);
     world.edit("12", |ticket| ticket.assignee = Some("someone-else".into()));

@@ -6,6 +6,7 @@ mod ci;
 mod clone;
 mod forge;
 mod labels;
+mod steps;
 mod tracker;
 
 use std::path::PathBuf;
@@ -51,5 +52,6 @@ impl Plugin for GitHub {
     fn register<'a>(&'a self, registry: &mut Registry<'a>) {
         registry.tracker(|settings| Ok(Box::new(self.tracker(settings)?)));
         registry.forge(self);
+        registry.step(self);
     }
 }

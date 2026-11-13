@@ -19,6 +19,7 @@ use atelier_core::{
 use atelier_opencode::{OpenCode, rules};
 
 mod live;
+mod steps;
 use serde_json::Value;
 
 static NEXT: AtomicU32 = AtomicU32::new(0);

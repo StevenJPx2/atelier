@@ -5,7 +5,7 @@ test_tool = "nextest"
 exclude_globs = ["**/proofs.rs"]
 exclude_re = [
   # Built only under cfg(kani), for the proofs; cargo kani checks it.
-  'crates/core/src/machine/pipeline\.rs:\d+:\d+: replace Pipeline::unnamed',
+  'crates/core/src/machine/limits\.rs:\d+:\d+: replace Limits::unnamed',
   # Equivalent: when the base is the default branch, reading its config again
   # reads the same file the first read did.
   'crates/cli/src/config\.rs:\d+:\d+: replace match guard base != default with true in resolve',

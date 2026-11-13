@@ -5,5 +5,7 @@ export default defineConfig({
   worker: {
     name: "atelier-docs",
     compatibilityDate: "2026-11-12",
+    // Paths no redirect covers land on 404.html, which links to the hub.
+    assets: { notFoundHandling: "404-page" },
   },
 })

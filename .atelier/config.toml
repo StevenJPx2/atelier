@@ -35,7 +35,7 @@ setup = [
 run = '''
 mkdir -p target
 git diff --no-ext-diff --no-textconv --no-color "$ATELIER_BASE" -- crates plugins > target/mutants.diff
-cargo mutants --in-diff target/mutants.diff --timeout 120
+cargo mutants --in-diff target/mutants.diff --timeout 120 --jobs 3
 '''
 
 [commands.msrv]

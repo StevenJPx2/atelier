@@ -58,6 +58,8 @@ fn finish_queues_an_outcome_without_writing_state_and_the_worker_closes_the_run(
         "{report}"
     );
     assert!(!worktree.exists());
+    let already_done = sandbox.atelier(&["stop", "build github#12"]);
+    assert!(!already_done.status.success());
     assert!(
         !sandbox
             .home
@@ -241,4 +243,27 @@ run = "sleep 300 & wait"
 
     assert!(!alive, "the command process group survived stop");
     assert!(!worktree(&sandbox).exists());
+}
+#[test]
+fn finish_checks_reason_bounds_and_stop_requires_the_exact_run_key() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    let daemon = sandbox.daemon();
+    sandbox.wait("builder", Sandbox::building);
+    drop(daemon);
+    let path = worktree(&sandbox);
+    let where_at = path.to_string_lossy();
+
+    let empty = sandbox.atelier(&["finish", "nothing", " ", "--path", &where_at]);
+    let oversized = sandbox.atelier(&["finish", "nothing", &"x".repeat(4097), "--path", &where_at]);
+    let exact = sandbox.atelier(&["finish", "nothing", &"x".repeat(4096), "--path", &where_at]);
+    let wrong_run = sandbox.atelier(&["stop", "other github#12"]);
+
+    assert!(!empty.status.success());
+    assert!(!oversized.status.success());
+    assert!(
+        exact.status.success(),
+        "{}",
+        String::from_utf8_lossy(&exact.stderr)
+    );
+    assert!(!wrong_run.status.success());
 }

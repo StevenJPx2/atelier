@@ -282,6 +282,43 @@ mod tests {
     }
 
     #[test]
+    fn an_exactly_maximum_sized_ready_request_is_read() {
+        let scratch = Scratch::new();
+        let mut bytes = serde_json::to_vec(&File::new(&key(), &finish("clean"))).unwrap();
+        bytes.resize(8192, b' ');
+        fs::write(scratch.0.join("0.json"), bytes).unwrap();
+
+        assert_eq!(read(&scratch.0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn filesystem_errors_are_not_mistaken_for_missing_or_reserved_slots() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let scratch = Scratch::new();
+        fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o0)).unwrap();
+        let denied = submit(&scratch.0, &key(), &finish("clean"));
+        fs::set_permissions(&scratch.0, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            denied
+                .unwrap_err()
+                .to_string()
+                .contains("reserving a request slot")
+        );
+
+        symlink("0.json", scratch.0.join("0.json")).unwrap();
+        assert!(read(&scratch.0).is_err());
+        fs::remove_file(scratch.0.join("0.json")).unwrap();
+
+        submit(&scratch.0, &key(), &finish("clean")).unwrap();
+        let queued = read(&scratch.0).unwrap();
+        fs::remove_file(scratch.0.join("0.json")).unwrap();
+        fs::create_dir(scratch.0.join("0.json")).unwrap();
+
+        assert!(acknowledge(&queued).is_err());
+    }
+
+    #[test]
     fn oversized_or_malformed_requests_are_refused() {
         let scratch = Scratch::new();
         let huge = finish(&"x".repeat(8193));

@@ -124,3 +124,70 @@ fn choose<'a>(
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use atelier_core::rungs::Outcome;
+    use atelier_core::{IssueKey, Kinds, MemoryTree, PipelineError, Setting, Settings};
+
+    use super::*;
+
+    fn pipeline() -> Result<Pipeline, PipelineError> {
+        let git = atelier_git::Git::new("/unused");
+        let agent = atelier_opencode::OpenCode::new();
+        let kinds = Kinds::default()
+            .with("git", "git", &git)
+            .with("agent", "opencode", &agent);
+        let worktree = Settings::default()
+            .with("id", Setting::Text("worktree".into()))
+            .with("uses", Setting::Text("git.worktree".into()));
+        let builder = Settings::default()
+            .with("id", Setting::Text("builder".into()))
+            .with("uses", Setting::Text("agent.session".into()))
+            .with("brief", Setting::Text("builder".into()))
+            .with(
+                "outcomes",
+                Setting::List(vec![Setting::Text("nothing".into())]),
+            );
+
+        Pipeline::read(
+            "build",
+            &[worktree, builder],
+            &kinds,
+            &MemoryTree::default(),
+        )
+    }
+
+    #[test]
+    fn finish_requires_a_running_run_matching_the_plan_and_reachable_progress() {
+        let pipeline = pipeline().unwrap();
+        let mut run = pipeline.plan().start();
+        run.advance();
+        run.settle(0, Outcome(0)).unwrap();
+        run.advance();
+        let key = IssueKey {
+            tracker: "github".into(),
+            id: "12".into(),
+        };
+        let mut record = Record::new(&key, "Fix", "build");
+        record.begin(&pipeline);
+        record.phase = Phase::Running;
+        record.progress = run.progress();
+
+        assert_eq!(
+            choose(&record, &pipeline, "nothing", None).unwrap().1.id,
+            "builder"
+        );
+        assert!(choose(&record, &pipeline, "nothing", Some("absent")).is_err());
+
+        let mut claiming = record.clone();
+        claiming.phase = Phase::Claiming;
+        let mut changed = record.clone();
+        changed.steps[0].id = "changed".into();
+        let mut unreachable = record;
+        unreachable.progress.status[0] = Status::Pending;
+
+        for invalid in [claiming, changed, unreachable] {
+            assert!(choose(&invalid, &pipeline, "nothing", None).is_err());
+        }
+    }
+}

@@ -482,6 +482,8 @@ mod tests {
             (building(), settled(CHECKS, PASSED)),
             (building(), settled(BUILDER, Outcome(5))),
             (Run::UNTRACKED, Event::Unmarked),
+            (Run::UNTRACKED, Event::Stop),
+            (done, Event::Stop),
             (done, Event::Changed),
             (done, settled(BUILDER, PASSED)),
             (Run::UNTRACKED, Event::Claimed),

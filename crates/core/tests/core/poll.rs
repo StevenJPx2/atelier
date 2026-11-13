@@ -324,6 +324,22 @@ fn a_stop_request_preempts_pending_starts_and_removes_the_request_mark() {
 }
 
 #[test]
+fn a_finish_waits_for_a_pending_start_and_cannot_settle_its_replacement() {
+    let (world, mut state) = building();
+    let request = finish(&state, "nothing");
+    state.runs.get_mut(&key()).unwrap().pending = vec![Action::Start(1)];
+
+    requested(&world, &mut state, request);
+
+    assert_eq!(phase(&state), Phase::Running);
+    assert_eq!(world.sessions.borrow().len(), 2);
+    assert_eq!(
+        state.runs[&key()].steps[1].session.as_ref().unwrap().id,
+        "ses_1"
+    );
+}
+
+#[test]
 fn a_stop_request_takes_priority_over_a_queued_finish() {
     let (world, mut state) = building();
     let finish = finish(&state, "nothing");

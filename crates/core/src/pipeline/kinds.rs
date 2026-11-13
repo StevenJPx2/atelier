@@ -41,7 +41,6 @@ impl<'a> Kinds<'a> {
             .map(|found| found.name.as_str())
             .collect();
         names.sort_unstable();
-        names.dedup();
         names
     }
 

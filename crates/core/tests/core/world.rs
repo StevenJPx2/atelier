@@ -42,6 +42,7 @@ pub struct World {
     pub briefs: RefCell<Vec<Brief>>,
     pub changes: RefCell<u32>,
     pub reads: RefCell<u32>,
+    pub forge_reads: RefCell<u32>,
     pub fail: RefCell<Option<(u32, Failure)>>,
     /// The project's filter for this tracker; the world honours its assignee.
     pub filter: RefCell<Filter>,
@@ -266,6 +267,7 @@ impl Tracker for World {
 
 impl Forge for World {
     fn pull_request(&self, _: &Repo, branch: &str) -> Result<Option<PullRequest>, PluginError> {
+        *self.forge_reads.borrow_mut() += 1;
         Ok(self.pulls.borrow().get(branch).copied())
     }
 

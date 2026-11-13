@@ -453,6 +453,20 @@ fn passed(why: &str) -> Observed {
 }
 
 #[test]
+fn a_pipeline_without_forge_steps_does_not_ask_the_forge() {
+    let world = World::with_issue("12", "Audit", &[Mark::Build]);
+    let mut project = world.project_with(&audit());
+    project.forge = "another-plugin".into();
+    let mut state = State::default();
+
+    world.poll(&project, &mut state);
+    world.poll(&project, &mut state);
+
+    assert_eq!(phase(&state), Phase::Running);
+    assert_eq!(*world.forge_reads.borrow(), 0);
+}
+
+#[test]
 fn steps_whose_needs_hold_together_start_in_the_same_poll() {
     let world = World::with_issue("12", "Audit", &[Mark::Build]);
     let project = world.project_with(&audit());

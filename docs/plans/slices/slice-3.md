@@ -677,7 +677,10 @@ atelier stop "security-audit github#40"
 Each finds the run by its worktree or key and leaves a request for the project's
 thread, which reads it on its next poll. The daemon stays the only writer of
 `state.json`. An agent's permissions allow `atelier finish *`, and `finish`
-refuses an outcome the step doesn't declare.
+refuses an outcome the step doesn't declare. `finish` infers the step when
+exactly one running agent step declares the outcome; if several do, it
+refuses with their ids and requires `--step <id>`. Each agent step's prompt
+includes its explicit finish command.
 
 Files: `crates/cli/src/requests.rs`, `finish.rs`, `stop.rs`.
 

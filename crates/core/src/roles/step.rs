@@ -22,6 +22,13 @@ pub enum Outcomes {
     Named,
 }
 
+/// What a step settled with, and why, as a run's closing comment lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outcome {
+    pub name: String,
+    pub why: String,
+}
+
 /// A plugin's kinds of step.
 pub trait Step {
     /// The kinds it offers.

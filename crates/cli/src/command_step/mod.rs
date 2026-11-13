@@ -1,6 +1,15 @@
 //! `atelier.command`: a shell command a pipeline runs in the run's
 //! worktree, with a time limit.
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "pipelines run their steps once the machine runs on rungs (#43)"
+    )
+)]
+pub mod run;
+
 use atelier_core::{Kind, Outcomes, Plugin, Registry, Settings, SettingsError, Step, Tree};
 
 /// A command's time limit when its step sets none.

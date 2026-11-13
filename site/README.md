@@ -7,7 +7,10 @@ search. Readers find it in the Workhorse hub, at
 pulls these pages from `main` when it builds. Here it runs locally and checks
 every pull request. The Worker `atelier-docs`, at
 [atelier-docs.stevenjpx2.workers.dev](https://atelier-docs.stevenjpx2.workers.dev),
-redirects each path to the same page in the hub.
+redirects readers to the corresponding page in the hub. Paths under
+`/plans/` and `/audits/` map to `/atelier/docs/plans/` and
+`/atelier/docs/audits/`; repository-relative paths keep their path under
+`/atelier/`.
 
 | Path                           | Holds                                                                                                       |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -15,7 +18,7 @@ redirects each path to the same page in the hub.
 | `.vitepress/theme/index.ts`    | Draws `mermaid` blocks in the site's font and colours, again when the page or the colour scheme changes     |
 | `.vitepress/theme/mermaid.css` | How a diagram sits in its column, and opened full screen                                                    |
 | `cloudflare.config.ts`         | The Worker and its account; `wrangler.config.ts` names the folder it serves                                 |
-| `redirect/_redirects`          | The Worker's one rule: every path to the same path under the hub's `/atelier/`                              |
+| `redirect/_redirects`          | Maps legacy plan and audit paths to `/atelier/docs/`, and repository-relative paths to `/atelier/` |
 
 - **Run:** `bun install`, then `bun run dev`.
 - **Build:** `bun run build` writes `.vitepress/dist/`, and fails on a dead

@@ -5,6 +5,5 @@ export default defineConfig({
   worker: {
     name: "atelier-docs",
     compatibilityDate: "2026-11-12",
-    assets: { notFoundHandling: "404-page" },
   },
 })

@@ -247,6 +247,21 @@ fn a_step_with_no_needs_written_waits_for_the_one_before_it_to_pass() {
 }
 
 #[test]
+fn a_pipeline_of_eight_steps_is_read_and_a_kind_s_own_outcomes_may_be_written() {
+    let mut steps = vec![step(
+        "s0",
+        "git.worktree",
+        &[("outcomes", list(&["passed"]))],
+    )];
+    steps.extend((1..8).map(|index| step(&format!("s{index}"), "git.worktree", &[])));
+
+    let pipeline = read(&steps).unwrap();
+
+    assert_eq!(pipeline.steps().len(), 8);
+    assert_eq!(pipeline.step("s0").unwrap().outcomes, ["passed"]);
+}
+
+#[test]
 fn a_table_names_one_outcome_or_several() {
     let pipeline = read(&[
         step("worktree", "git.worktree", &[]),
@@ -335,6 +350,14 @@ fn a_step_needs_its_own_id_and_a_kind_this_atelier_offers() {
         (
             vec![step("worktree", "worktree", &[])],
             "security-audit: worktree: uses is \"worktree\"; it takes <namespace>.<kind>, such as forge.checks",
+        ),
+        (
+            vec![step("worktree", "git.", &[])],
+            "security-audit: worktree: uses is \"git.\"; it takes <namespace>.<kind>, such as forge.checks",
+        ),
+        (
+            vec![step("worktree", ".worktree", &[])],
+            "security-audit: worktree: uses is \".worktree\"; it takes <namespace>.<kind>, such as forge.checks",
         ),
         (
             vec![worktree(), step("reviews", "forge.reviews", &[])],

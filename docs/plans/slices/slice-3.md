@@ -253,7 +253,7 @@ A future `critic` or `recording` plugin is one more set of kinds,
 `critic.review` or `recording.record`, with nothing in core about it.
 
 Files: `crates/core/src/pipeline/` (`Pipeline`, `StepSpec`, `Needs`, the config
-check), `crates/core/src/roles/step.rs`, `crates/cli/src/command_step.rs`, and
+check), `crates/core/src/roles/step.rs`, `crates/cli/src/command_step/`, and
 each plugin's `steps.rs`.
 
 #### Structure
@@ -301,6 +301,31 @@ pub struct BranchTree {
 }
 
 impl Tree for BranchTree {}
+```
+
+A command runs in the background, in its own process group, so a poll never
+waits on it and a daemon restarted while it runs leaves it running. A start
+empties the step's folder and starts the command there; a later poll reads how
+it ended. It settles `passed` on exit 0, and `failed` on any other exit, past
+its limit, which kills its whole group, or when it stopped without an exit
+status; each says why, with the last 20 lines it printed. `ATELIER_BASE` is
+`origin/<base>`, as for the gates.
+
+```rust
+pub struct Outcome {
+    pub name: String,
+    pub why: String,
+}
+
+pub fn start(
+    folder: &Path,
+    worktree: &Path,
+    base: &str,
+    settings: &Settings,
+) -> Result<(), PluginError>;
+
+pub fn observe(folder: &Path, settings: &Settings)
+    -> Result<Option<Outcome>, PluginError>;
 ```
 
 ### The `build` pipeline

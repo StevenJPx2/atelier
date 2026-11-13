@@ -1,10 +1,29 @@
-# Earlier site paths omit the repository's docs/ prefix.
-/plans.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/ 301
+# Every rule covers its own paths, so none depends on the order Cloudflare
+# tries them in. Exact paths come first, then one rule per top-level folder.
+/ https://workhorse-docs.stevenjpx2.workers.dev/atelier/ 301
+/index.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/ 301
 /plans https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/ 301
-/plans/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/:splat 301
-/audits.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/plans.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/ 301
 /audits https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/audits.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
 /audits/ https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/atelier 301
+/docs https://workhorse-docs.stevenjpx2.workers.dev/atelier/ 301
+/docs/ https://workhorse-docs.stevenjpx2.workers.dev/atelier/ 301
+/docs.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/ 301
+/crates https://workhorse-docs.stevenjpx2.workers.dev/atelier/crates/ 301
+/crates.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/crates/ 301
+/plugins https://workhorse-docs.stevenjpx2.workers.dev/atelier/plugins/ 301
+/plugins.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/plugins/ 301
+/scripts https://workhorse-docs.stevenjpx2.workers.dev/atelier/scripts/ 301
+/scripts.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/scripts/ 301
+/site https://workhorse-docs.stevenjpx2.workers.dev/atelier/site/ 301
+/site.html https://workhorse-docs.stevenjpx2.workers.dev/atelier/site/ 301
+# Earlier site paths omit the repository's docs/ prefix.
+/plans/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/plans/:splat 301
 /audits/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/audits/:splat 301
-# Repository-relative paths keep their path in the hub.
-/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/:splat 301
+# Repository paths keep their path in the hub.
+/docs/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/docs/:splat 301
+/crates/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/crates/:splat 301
+/plugins/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/plugins/:splat 301
+/scripts/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/scripts/:splat 301
+/site/* https://workhorse-docs.stevenjpx2.workers.dev/atelier/site/:splat 301

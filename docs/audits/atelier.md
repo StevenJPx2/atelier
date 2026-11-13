@@ -1,8 +1,7 @@
 # Audit: atelier before slice 3
 
-**Status: Fixed, shipping in `0.1.0-rc.8`.** Four findings, each reproduced
-twice and fixed with its regression test; five more seen and not fixed, with
-why.
+**Status: Fixed in `0.1.0-rc.8`.** Four findings, each reproduced twice and
+fixed with its regression test; five more seen and not fixed, with why.
 
 The audit covers the daemon and what it drives: the issue machine's actions
 as `act` carries them out, builders' OpenCode sessions, atelier's clones and

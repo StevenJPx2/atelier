@@ -43,6 +43,11 @@ pub(super) fn outside(run: Run, event: Event) -> Option<(Run, Vec<Action>)> {
         (Phase::Blocked(_), Event::Requested) => claim(Some(Action::Unmark(Mark::Blocked))),
         (Phase::Claiming, Event::ClaimFailed) => block(run, Reason::Claim),
         (_, Event::Changed) if working => block(run, Reason::Changed),
+        (_, Event::Stop) if working => {
+            let (stopped, mut actions) = stop(run);
+            actions.insert(0, Action::Unmark(Mark::Build));
+            (stopped, actions)
+        }
         (_, Event::Unmarked | Event::IssueClosed) if working => stop(run),
         (Phase::Untracked, Event::LostTrack) => block(run, Reason::LostTrack),
         (Phase::Claiming, Event::Claimed)

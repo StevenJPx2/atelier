@@ -7,6 +7,8 @@ use crate::{Filter, Issue, IssueKey, Listing, Mark, Phase, PluginError, Seen};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Observation {
     pub issues: BTreeMap<IssueKey, Watched>,
+    /// Requests the project's worker read for this poll.
+    pub requests: BTreeMap<IssueKey, Vec<super::Request>>,
     /// Listing tags to keep once every issue is acted on.
     pub etags: BTreeMap<(String, Mark), String>,
 }

@@ -30,6 +30,8 @@ struct ProjectFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct RunFile {
+    #[serde(default)]
+    generation: u64,
     pipeline: String,
     tracker: String,
     id: String,
@@ -226,6 +228,7 @@ impl RunFile {
             });
 
         let record = Record {
+            generation: self.generation,
             pipeline: self.pipeline,
             phase: self.phase.into(),
             progress,
@@ -258,6 +261,7 @@ impl RunFile {
             });
 
         Self {
+            generation: record.generation,
             pipeline: record.pipeline.clone(),
             tracker: key.tracker.clone(),
             id: key.id.clone(),

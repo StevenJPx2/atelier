@@ -213,6 +213,138 @@ fn a_stale_listing_of_a_closed_or_unmarked_item_starts_no_run() {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "test fixture: the in-memory world must answer and save"
+)]
+fn requested(
+    world: &World,
+    state: &mut State,
+    request: atelier_core::Request,
+) -> atelier_core::Report {
+    let project = world.project();
+    let plugins = world.plugins();
+    let mut observation = observe(&project, &plugins, state).unwrap();
+    observation.requests.insert(key(), vec![request]);
+
+    act(&observation, state, &project, &plugins, &mut |_| {
+        Ok::<(), ()>(())
+    })
+    .unwrap()
+}
+
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "test fixture: building holds its builder session"
+)]
+fn finish(state: &State, name: &str) -> atelier_core::Request {
+    let record = &state.runs[&key()];
+    atelier_core::Request {
+        generation: record.generation,
+        command: atelier_core::Command::Finish {
+            step: "builder".into(),
+            outcome: atelier_core::Outcome {
+                name: name.into(),
+                why: "nothing needs changing".into(),
+            },
+            session: record.steps[1].session.as_ref().unwrap().id.clone(),
+            failed: record.progress.failed[1],
+        },
+    }
+}
+
+#[test]
+fn a_finish_request_settles_its_step_and_is_harmless_when_replayed() {
+    let (world, mut state) = building();
+    let request = finish(&state, "nothing");
+
+    requested(&world, &mut state, request.clone());
+    let done = state.clone();
+    requested(&world, &mut state, request);
+
+    assert_eq!(phase(&state), Phase::Done);
+    assert_eq!(state, done);
+    assert_eq!(status(&state, "builder"), Some(Status::Settled(Outcome(1))));
+    assert!(
+        world
+            .ticket("12")
+            .comments
+            .last()
+            .unwrap()
+            .contains("nothing needs changing")
+    );
+}
+
+#[test]
+fn stale_or_invalid_finish_requests_leave_the_run_alone() {
+    let (world, mut state) = building();
+    let good = finish(&state, "nothing");
+    let mut old_pass = good.clone();
+    old_pass.generation = old_pass.generation.saturating_sub(1);
+    let mut old_session = good.clone();
+    if let atelier_core::Command::Finish { session, .. } = &mut old_session.command {
+        *session = "replaced-session".into();
+    }
+    let mut old_round = good;
+    if let atelier_core::Command::Finish { failed, .. } = &mut old_round.command {
+        *failed = 1;
+    }
+    let unknown = finish(&state, "unknown");
+
+    for request in [old_pass, old_session, old_round, unknown] {
+        let before = state.clone();
+
+        let report = requested(&world, &mut state, request);
+
+        assert_eq!(state, before);
+        assert_eq!(report.moves, []);
+    }
+}
+
+#[test]
+fn a_stop_request_preempts_pending_starts_and_removes_the_request_mark() {
+    let world = World::with_issue("12", "Fix the dead link", &[Mark::Build]);
+    let mut state = State::default();
+    let mut record = Record::new(&key(), "Fix the dead link", "build");
+    record.begin(&world.project().pipelines[0]);
+    record.phase = Phase::Claiming;
+    record.pending = vec![Action::Mark(Mark::Working), Action::Unmark(Mark::Build)];
+    let request = atelier_core::Request {
+        generation: record.generation,
+        command: atelier_core::Command::Stop,
+    };
+    state.runs.insert(key(), record);
+
+    requested(&world, &mut state, request);
+
+    assert_eq!(phase(&state), Phase::Stopped);
+    assert_eq!(world.ticket("12").marks, Marks::default());
+    assert_eq!(*world.started.borrow(), Vec::<String>::new());
+}
+
+#[test]
+fn a_stop_request_takes_priority_over_a_queued_finish() {
+    let (world, mut state) = building();
+    let finish = finish(&state, "nothing");
+    let stop = atelier_core::Request {
+        generation: state.runs[&key()].generation,
+        command: atelier_core::Command::Stop,
+    };
+    let project = world.project();
+    let plugins = world.plugins();
+    let mut observation = observe(&project, &plugins, &state).unwrap();
+    observation.requests.insert(key(), vec![finish, stop]);
+
+    act(&observation, &mut state, &project, &plugins, &mut |_| {
+        Ok::<(), ()>(())
+    })
+    .unwrap();
+
+    assert_eq!(phase(&state), Phase::Stopped);
+    assert!(world.ticket("12").open);
+}
+
 #[test]
 fn a_transient_failure_retries_and_keeps_the_listing_unconfirmed() {
     let world = World::with_issue("12", "Fix the dead link", &[Mark::Build]);

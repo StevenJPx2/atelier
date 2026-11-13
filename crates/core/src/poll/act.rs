@@ -63,7 +63,14 @@ pub fn act<E>(
     let mut report = Report::default();
 
     for (key, watched) in &observation.issues {
-        if let Err(error) = drive(watched, state, &context, save, &mut report.moves)? {
+        if let Err(error) = drive(
+            watched,
+            observation.requests.get(key).map_or(&[], Vec::as_slice),
+            state,
+            &context,
+            save,
+            &mut report.moves,
+        )? {
             report.failures.push((key.clone(), error));
         }
     }
@@ -78,6 +85,7 @@ pub fn act<E>(
 
 fn drive<E>(
     watched: &Watched,
+    requests: &[super::Request],
     state: &mut State,
     context: &Context<'_, '_>,
     save: &mut impl FnMut(&State) -> Result<(), E>,
@@ -97,7 +105,12 @@ fn drive<E>(
         let run = record.map_or(Run::UNTRACKED, Record::run);
         let pending = record.and_then(|record| record.pending.first().copied());
 
-        let (event, why) = if let Some(action) = pending {
+        let requested = super::request::requested(requests, record, pipeline);
+
+        let (event, why) = if let Some(requested) = requested {
+            state.record(issue, &name).pending.clear();
+            requested
+        } else if let Some(action) = pending {
             let record = state.record(issue, &name);
 
             match perform(action, watched, &mut seen, record, pipeline, context) {
@@ -408,6 +421,7 @@ fn what(event: Event, record: &Record, pipeline: Option<&Pipeline>) -> String {
         Event::StartFailed { step } => format!("{} could not start", id(step)),
         Event::Pushed { step } => format!("{} runs again", id(step)),
         Event::Changed => "its pipeline changed".to_owned(),
+        Event::Stop => "stop requested".to_owned(),
         Event::Unmarked => "lost its working mark".to_owned(),
         Event::IssueClosed => "the issue closed".to_owned(),
         Event::LostTrack => "carries the working mark with no run".to_owned(),
@@ -562,7 +576,8 @@ fn stopped(record: &Record) -> String {
     let why = match record.phase {
         Phase::Blocked(reason) => blocked(reason, record),
         Phase::Done => format!("atelier finished this run of {}.", record.pipeline),
-        _ => "atelier stopped this run: the issue lost its working mark or was closed.".to_owned(),
+        _ => "atelier stopped this run: it was stopped, lost its working mark or was closed."
+            .to_owned(),
     };
 
     format!(

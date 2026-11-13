@@ -5,9 +5,10 @@
 [#1](https://github.com/StevenJPx2/atelier/issues/1). The `sourcefed` trigger
 follows as slice 4 ([#42](https://github.com/StevenJPx2/atelier/issues/42)).
 Pipelines run on [rungs](https://github.com/StevenJPx2/rungs) `v0.1.0`, and
-an earlier rc's `state.json` is read into runs of `build`. Left:
-`atelier finish` and `atelier stop`, and a trigger mark for each pipeline;
-until then the build mark starts `build`.
+an earlier rc's `state.json` is read into runs of `build`. Agents settle
+their steps with `atelier finish`, and a person stops a run with
+`atelier stop`. Left: a trigger mark for each pipeline; until then the build
+mark starts `build`.
 
 ## You can
 
@@ -552,6 +553,7 @@ pub enum Event {
     StartFailed { step: u8 },
     Pushed { step: u8 },
     Changed,
+    Stop,
     Unmarked,
     IssueClosed,
     LostTrack,
@@ -639,6 +641,7 @@ pub struct Project {
 }
 
 pub struct Record {
+    pub generation: u64,
     pub pipeline: String,
     pub phase: Phase,
     pub progress: Progress,
@@ -682,7 +685,70 @@ exactly one running agent step declares the outcome; if several do, it
 refuses with their ids and requires `--step <id>`. Each agent step's prompt
 includes its explicit finish command.
 
-Files: `crates/cli/src/requests.rs`, `finish.rs`, `stop.rs`.
+Files: `crates/cli/src/requests/`, `finish.rs`, `stop.rs`, and
+`crates/core/src/poll/request.rs`.
+
+#### Structure
+
+A request names the run's generation, so one left from an older pass cannot
+affect a fresh run. A finish also names the running agent step's session and
+failed-round count; a stale request or a replay changes nothing. A stop
+preempts finishes and pending starts and removes the trigger mark, so the
+same request cannot start the run again.
+
+```rust
+pub struct Request {
+    pub generation: u64,
+    pub command: Command,
+}
+
+pub enum Command {
+    Finish {
+        step: String,
+        outcome: Outcome,
+        session: String,
+        failed: u8,
+    },
+    Stop,
+}
+
+pub struct Observation {
+    pub issues: BTreeMap<IssueKey, Watched>,
+    pub requests: BTreeMap<IssueKey, Vec<Request>>,
+    pub etags: BTreeMap<(String, Mark), String>,
+}
+```
+
+Each project's queue has 128 slots under
+`~/.local/state/atelier/requests/<owner>/<repo>/`. A temporary file reserves
+a slot before it is written and renamed; a reader sees only ready files. A
+full queue refuses another request without waiting. Each request is at most
+8 KiB, and a finish reason at most 4096 bytes. The worker acknowledges only
+after every action succeeds and its effects are saved, so a crash between
+acting and acknowledgement replays safely.
+
+```rust
+pub fn submit(folder: &Path, key: &IssueKey, request: &Request) -> Result<()>;
+pub fn read(folder: &Path) -> Result<Vec<Queued>>;
+pub fn acknowledge(queued: &[Queued]) -> Result<()>;
+```
+
+Finish finds the working run whose worktree contains its path; stop finds a
+pipeline/item key across the watched projects, with `--repo owner/name`
+when several match. The builder's session title remains the issue title;
+each agent step's prompt includes its outcomes and an explicit finish
+command naming its own step.
+
+```rust
+pub struct Target {
+    pub repo: String,
+    pub key: IssueKey,
+    pub record: Record,
+}
+
+pub fn in_worktree(paths: &Paths, path: &Path) -> Result<Target>;
+pub fn by_key(paths: &Paths, selector: &str, repo: Option<&str>) -> Result<Target>;
+```
 
 ### State from an older rc
 

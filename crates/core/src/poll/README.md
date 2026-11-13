@@ -26,6 +26,7 @@ sequenceDiagram
 | File         | Holds                                                                |
 | ------------ | -------------------------------------------------------------------- |
 | `project.rs` | `Project` with its pipelines, and `Plugins` with each kind of step   |
+| `request.rs` | Requests for a pass: finish a running resident step, or stop it      |
 | `state.rs`   | `State`, each item's run as a `Record`, and each step's `StepRecord` |
 | `observe.rs` | `observe`: listings with their tags, tracked issues, pull requests   |
 | `act.rs`     | `act`: each run's events, pending actions, the brief, the `Report`   |

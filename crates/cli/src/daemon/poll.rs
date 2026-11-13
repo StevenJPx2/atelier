@@ -15,6 +15,7 @@ use crate::log::log;
 use crate::paths::Paths;
 use crate::plugins::Build;
 use crate::projects::Entry;
+use crate::requests;
 
 /// How soon a project is polled again after it acted, to follow up quickly.
 const SOON: Duration = Duration::from_secs(5);
@@ -87,9 +88,23 @@ fn once(
         ..resolved.project
     };
 
-    let observation = observe(&project, &plugins, state)?;
+    let queued = requests::read(&requests::folder(paths, &entry.repo))?;
+    let mut observation = observe(&project, &plugins, state)?;
+
+    for queued in &queued {
+        observation
+            .requests
+            .entry(queued.key.clone())
+            .or_default()
+            .push(queued.request.clone());
+    }
+
     let mut save = |state: &State| writer.save(&entry.repo, state);
     let report = act(&observation, state, &project, &plugins, &mut save)?;
+
+    if report.failures.is_empty() {
+        requests::acknowledge(&queued)?;
+    }
 
     Ok((report, resolved.poll))
 }

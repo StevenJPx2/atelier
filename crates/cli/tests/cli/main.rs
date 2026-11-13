@@ -4,6 +4,7 @@
 mod gates;
 mod pipelines;
 mod recovery;
+mod requests;
 mod sandbox;
 
 use std::fs;

@@ -18,6 +18,8 @@ pub struct State {
 /// between actions resumes where it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
+    /// The pass of its pipeline; requests for an older pass are ignored.
+    pub generation: u64,
     pub pipeline: String,
     pub phase: Phase,
     /// Each step's status and failed rounds, by its position.
@@ -49,6 +51,7 @@ impl Record {
     #[must_use]
     pub fn new(key: &IssueKey, title: &str, pipeline: &str) -> Self {
         Self {
+            generation: 0,
             pipeline: pipeline.to_owned(),
             phase: Phase::Untracked,
             progress: Progress::default(),
@@ -96,6 +99,7 @@ impl Record {
     /// session, which its next start replaces.
     pub fn begin(&mut self, pipeline: &Pipeline) {
         let last = std::mem::take(&mut self.steps);
+        self.generation = self.generation.saturating_add(1);
 
         pipeline.name().clone_into(&mut self.pipeline);
         self.steps = pipeline

@@ -51,7 +51,7 @@ fn rule(action: &str, resource: &str, effect: Effect) -> Rule {
 /// waiting for an answer.
 ///
 /// ```
-/// use atelier_core::{Brief, Issue, IssueKey, Marks, Pipeline};
+/// use atelier_core::{Brief, Issue, IssueKey, Marks, Limits};
 /// use atelier_opencode::{Effect, Rule, rules};
 ///
 /// let issue = Issue {
@@ -60,7 +60,7 @@ fn rule(action: &str, resource: &str, effect: Effect) -> Rule {
 ///     open: true,
 ///     marks: Marks::default(),
 /// };
-/// let brief = Brief::new("#12", &issue, "issue-12-fix", "v2", &Pipeline::new(5, [])?)
+/// let brief = Brief::new("#12", &issue, "issue-12-fix", "v2", &Limits::new(5, [])?)
 ///     .deny(["gh pr merge *".into()]);
 ///
 /// let rules = rules(&brief);
@@ -77,7 +77,7 @@ fn rule(action: &str, resource: &str, effect: Effect) -> Rule {
 ///     shell("gh pr merge *", Effect::Deny),
 ///     Rule { action: "question".into(), resource: "*".into(), effect: Effect::Deny },
 /// ]);
-/// # Ok::<(), atelier_core::PipelineError>(())
+/// # Ok::<(), atelier_core::LimitsError>(())
 /// ```
 #[must_use]
 pub fn rules(brief: &Brief) -> Vec<Rule> {

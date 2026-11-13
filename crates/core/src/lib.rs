@@ -15,7 +15,7 @@ pub use brief::Brief;
 pub use checks::{
     Checks, Fix, Gate, MemoryTree, Override, Overrides, Planned, Root, Tree, fixes, gates,
 };
-pub use machine::{Action, Event, Mark, Phase, Pipeline, PipelineError, Reason, step};
+pub use machine::{Action, Event, Limits, LimitsError, Mark, Phase, Reason, step};
 pub use plugin::{MakeChecks, MakeTracker, MissingPlugin, On, Plugin, Registry, Role};
 pub use poll::{
     Observation, Observed, Plugins, Project, Record, Report, Source, State, Step, act, observe,

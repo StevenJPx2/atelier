@@ -1,15 +1,15 @@
-use super::{Action, Event, Mark, Phase, Pipeline, Reason};
+use super::{Action, Event, Limits, Mark, Phase, Reason};
 
 /// Moves one issue's phase on one event, and names the actions that carry
 /// the move out. Total: an event that does not apply leaves the phase and
 /// names nothing.
 ///
 /// ```
-/// use atelier_core::{Action, Event, Mark, Phase, Pipeline, Reason, step};
+/// use atelier_core::{Action, Event, Mark, Phase, Limits, Reason, step};
 ///
-/// let pipeline = Pipeline::new(5, [("critic", 2)])?;
+/// let limits = Limits::new(5, [("critic", 2)])?;
 ///
-/// let (next, actions) = step(Phase::Open { rounds: 4 }, Event::RoundFailed, &pipeline);
+/// let (next, actions) = step(Phase::Open { rounds: 4 }, Event::RoundFailed, &limits);
 ///
 /// assert_eq!(next, Phase::Blocked(Reason::RedRounds));
 /// assert_eq!(actions, [
@@ -18,10 +18,10 @@ use super::{Action, Event, Mark, Phase, Pipeline, Reason};
 ///     Action::Mark(Mark::Blocked),
 ///     Action::Comment(Reason::RedRounds),
 /// ]);
-/// # Ok::<(), atelier_core::PipelineError>(())
+/// # Ok::<(), atelier_core::LimitsError>(())
 /// ```
 #[must_use]
-pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Action>) {
+pub fn step(phase: Phase, event: Event, limits: &Limits) -> (Phase, Vec<Action>) {
     match (phase, event) {
         (Phase::Untracked | Phase::Stopped, Event::Requested) => (
             Phase::Claiming,
@@ -46,18 +46,18 @@ pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Acti
         (Phase::Open { rounds }, Event::RoundFailed) => {
             let rounds = rounds.saturating_add(1);
 
-            if rounds >= pipeline.red_rounds() {
+            if rounds >= limits.red_rounds() {
                 block(Reason::RedRounds, vec![Action::Interrupt])
             } else {
                 (Phase::Open { rounds }, vec![])
             }
         }
-        (Phase::Open { rounds }, Event::AllPassed) => stage(pipeline, 0, rounds),
+        (Phase::Open { rounds }, Event::AllPassed) => stage(limits, 0, rounds),
         (Phase::Stage { index, rounds }, Event::StagePassed) => {
-            stage(pipeline, index.saturating_add(1), rounds)
+            stage(limits, index.saturating_add(1), rounds)
         }
         (Phase::Stage { index, .. }, Event::StageFailed { rounds })
-            if pipeline.limit(index).is_some_and(|limit| rounds >= limit) =>
+            if limits.limit(index).is_some_and(|limit| rounds >= limit) =>
         {
             block(Reason::Stage(index), vec![Action::Interrupt])
         }
@@ -87,8 +87,8 @@ pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Acti
 
 /// The `index`th stage, started; Green once there are no more, and the
 /// builder told so.
-fn stage(pipeline: &Pipeline, index: u8, rounds: u8) -> (Phase, Vec<Action>) {
-    if index < pipeline.stages() {
+fn stage(limits: &Limits, index: u8, rounds: u8) -> (Phase, Vec<Action>) {
+    if index < limits.stages() {
         (
             Phase::Stage { index, rounds },
             vec![Action::StartStage(index)],
@@ -118,12 +118,12 @@ mod tests {
 
     const OPEN: Phase = Phase::Open { rounds: 1 };
 
-    fn none() -> Pipeline {
-        Pipeline::new(2, []).unwrap()
+    fn none() -> Limits {
+        Limits::new(2, []).unwrap()
     }
 
-    fn critic() -> Pipeline {
-        Pipeline::new(2, [("critic", 2), ("recording", 1)]).unwrap()
+    fn critic() -> Limits {
+        Limits::new(2, [("critic", 2), ("recording", 1)]).unwrap()
     }
 
     const fn stage(index: u8) -> Phase {
@@ -144,10 +144,10 @@ mod tests {
         (Phase::Blocked(reason), actions)
     }
 
-    fn check(pipeline: &Pipeline, cases: Vec<(Phase, Event, Expected)>) {
+    fn check(limits: &Limits, cases: Vec<(Phase, Event, Expected)>) {
         for (phase, event, expected) in cases {
             assert_eq!(
-                step(phase, event, pipeline),
+                step(phase, event, limits),
                 expected,
                 "{phase:?} on {event:?}"
             );

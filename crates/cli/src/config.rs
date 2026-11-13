@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use atelier_core::{Override, Overrides, Pipeline, Project, Repo, Setting, Settings};
+use atelier_core::{Limits, Override, Overrides, Project, Repo, Setting, Settings};
 use atelier_git::Repository;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 use serde::Deserialize;
@@ -158,7 +158,7 @@ fn build(
         bail!("{CONFIG}: limits.{key} is unknown; it takes red_rounds");
     }
 
-    let pipeline = Pipeline::new(red_rounds.unwrap_or(DEFAULT_RED_ROUNDS), [])
+    let limits = Limits::new(red_rounds.unwrap_or(DEFAULT_RED_ROUNDS), [])
         .map_err(|error| eyre!("{CONFIG}: {error}"))?;
 
     let poll = file.poll.unwrap_or(DEFAULT_POLL_SECS);
@@ -186,7 +186,7 @@ fn build(
         ),
         (
             "red_rounds",
-            pipeline.red_rounds().to_string(),
+            limits.red_rounds().to_string(),
             set(red_rounds.is_some()),
         ),
         ("poll", format!("{poll} s"), set(file.poll.is_some())),
@@ -206,7 +206,7 @@ fn build(
             repo: Repo(entry.repo.clone()),
             local: local.path().to_owned(),
             base,
-            pipeline,
+            limits,
         },
         trackers,
         checks,

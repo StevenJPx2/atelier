@@ -14,9 +14,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{
-    Agent, Brief, CiFile, Failure, Filter, Forge, Issue, IssueKey, Listing, Mark, Marks,
-    Observation, Pipeline, PluginError, Plugins, Project, PullRequest, Repo, Report, Session,
-    Source, State, Tracker, WorktreeRequest, Worktrees, act, observe,
+    Agent, Brief, CiFile, Failure, Filter, Forge, Issue, IssueKey, Limits, Listing, Mark, Marks,
+    Observation, PluginError, Plugins, Project, PullRequest, Repo, Report, Session, Source, State,
+    Tracker, WorktreeRequest, Worktrees, act, observe,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,7 +51,7 @@ pub fn project(stages: &[(&str, u8)]) -> Project {
         repo: Repo("o/r".into()),
         local: PathBuf::from("/local"),
         base: "v2".into(),
-        pipeline: Pipeline::new(3, stages.iter().copied()).unwrap(),
+        limits: Limits::new(3, stages.iter().copied()).unwrap(),
     }
 }
 

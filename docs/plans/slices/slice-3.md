@@ -4,8 +4,10 @@
 [#43](https://github.com/StevenJPx2/atelier/issues/43), slice 3 of
 [#1](https://github.com/StevenJPx2/atelier/issues/1). The `sourcefed` trigger
 follows as slice 4 ([#42](https://github.com/StevenJPx2/atelier/issues/42)).
-The parts that need no machine come first; the machine moves to
-[rungs](https://github.com/StevenJPx2/rungs) once its `v0.1.0` tag exists.
+Pipelines run on [rungs](https://github.com/StevenJPx2/rungs) `v0.1.0`, and
+an earlier rc's `state.json` is read into runs of `build`. Left:
+`atelier finish` and `atelier stop`, and a trigger mark for each pipeline;
+until then the build mark starts `build`.
 
 ## You can
 

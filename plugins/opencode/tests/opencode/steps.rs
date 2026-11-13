@@ -177,7 +177,9 @@ fn a_session_starts_with_its_prompt_or_the_builder_s_brief() {
         panic!("no session: {started:?}");
     };
     assert_eq!(made.id, CREATED);
-    assert_eq!(made.title, "#12 Fix the dead link");
+    assert_eq!(made.title, "#12 Fix the dead link [audit]");
+    assert_eq!(body(&prompted.calls()[1])["title"], made.title);
+    assert_eq!(body(&builder.calls()[1])["title"], "#12 Fix the dead link");
     assert_eq!(
         body(&prompted.calls()[2])["text"],
         "Audit the dependencies."

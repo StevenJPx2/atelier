@@ -62,7 +62,11 @@ impl Step for OpenCode {
             PluginError::permanent("a session works in the run's worktree; git.worktree makes it")
         })?;
         let brief = match step.settings.text("", "text") {
-            Ok(Some(prompt)) => run.brief.prompted(prompt),
+            Ok(Some(prompt)) => {
+                let mut brief = run.brief.prompted(prompt);
+                brief.title = format!("{} [{}]", brief.title, step.id);
+                brief
+            }
             _ => run.brief.clone(),
         };
 

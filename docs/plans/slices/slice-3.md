@@ -283,7 +283,9 @@ plugin of core's own kinds, offering `command`, which takes `run` and
 `timeout`, its limit in seconds: 600 unless set, at most a day. GitHub offers `checks`,
 `ready` and `merge`, none with settings. OpenCode offers `session`, which
 takes `prompt`, a file on the base branch whose text it keeps under `text`,
-or `brief = "builder"`. A prompt is read from `origin/<base>` through a
+or `brief = "builder"`. A prompted session's title includes its step id, so
+two agent steps in the worktree keep separate sessions. A prompt is read
+from `origin/<base>` through a
 `BranchTree`, listed once and each file read when asked.
 
 ```rust

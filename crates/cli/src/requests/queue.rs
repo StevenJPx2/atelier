@@ -66,14 +66,18 @@ pub fn submit(folder: &Path, key: &IssueKey, request: &Request) -> Result<()> {
             fs::rename(&temporary, &path)?;
             Ok::<_, std::io::Error>(true)
         })();
-        let _ = fs::remove_file(&temporary);
-
-        if result.wrap_err("writing a request")? {
+        if release(&temporary, result)? {
             return Ok(());
         }
     }
 
     bail!("the project's request queue is full ({SLOTS} requests)")
+}
+
+/// Releases a writer's temporary reservation after its write.
+fn release(temporary: &Path, result: std::io::Result<bool>) -> Result<bool> {
+    let _ = fs::remove_file(temporary);
+    result.wrap_err("writing a request")
 }
 
 /// Reads a project's ready requests, at most `SLOTS`, with no wait.
@@ -203,11 +207,16 @@ mod tests {
     #[test]
     fn concurrent_writers_keep_every_request() {
         let scratch = Scratch::new();
+        let together = std::sync::Barrier::new(64);
         std::thread::scope(|scope| {
-            let writers: Vec<_> = (0..8)
+            let writers: Vec<_> = (0..64)
                 .map(|id| {
                     let root = &scratch.0;
-                    scope.spawn(move || submit(root, &key(), &finish(&format!("checked {id}"))))
+                    let together = &together;
+                    scope.spawn(move || {
+                        together.wait();
+                        submit(root, &key(), &finish(&format!("checked {id}")))
+                    })
                 })
                 .collect();
 
@@ -226,10 +235,11 @@ mod tests {
             .collect();
         reasons.sort();
 
-        assert_eq!(
-            reasons,
-            (0..8).map(|id| format!("checked {id}")).collect::<Vec<_>>()
-        );
+        let mut expected = (0..64)
+            .map(|id| format!("checked {id}"))
+            .collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(reasons, expected);
     }
 
     #[test]

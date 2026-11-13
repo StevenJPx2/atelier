@@ -156,6 +156,64 @@ fn a_stop_after_any_save_resumes_to_the_same_end() {
 }
 
 #[test]
+fn a_settled_step_without_restart_is_not_observed_again() {
+    let (world, mut state) = building();
+    world.observed.borrow_mut().clear();
+
+    world.poll(&world.project(), &mut state);
+
+    assert_eq!(*world.observed.borrow(), ["builder"]);
+    assert_eq!(
+        status(&state, "worktree"),
+        Some(Status::Settled(Outcome(0)))
+    );
+}
+
+#[test]
+fn a_stale_listing_of_a_closed_or_unmarked_item_starts_no_run() {
+    use atelier_core::{Issue, Observation, Seen, Watched};
+    use std::collections::BTreeMap;
+
+    for (open, marks) in [
+        (false, Marks::default().with(Mark::Working)),
+        (true, Marks::default()),
+    ] {
+        let world = World::with_issue("12", "Fix the dead link", &[]);
+        let issue = Issue {
+            key: key(),
+            title: "Fix the dead link".into(),
+            open,
+            marks,
+        };
+        let watched = Watched {
+            issue,
+            seen: Seen {
+                open,
+                marks,
+                pull_request: None,
+            },
+        };
+        let observation = Observation {
+            issues: BTreeMap::from([(key(), watched)]),
+            ..Observation::default()
+        };
+        let mut state = State::default();
+
+        let report = act(
+            &observation,
+            &mut state,
+            &world.project(),
+            &world.plugins(),
+            &mut |_| Ok::<(), ()>(()),
+        )
+        .unwrap();
+
+        assert_eq!(report.moves, []);
+        assert!(state.runs.is_empty());
+    }
+}
+
+#[test]
 fn a_transient_failure_retries_and_keeps_the_listing_unconfirmed() {
     let world = World::with_issue("12", "Fix the dead link", &[Mark::Build]);
     let project = world.project();

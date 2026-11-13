@@ -47,6 +47,8 @@ pub struct World {
     pub filter: RefCell<Filter>,
     /// Each step started, by its id, in order.
     pub started: RefCell<Vec<String>>,
+    /// Each step observed, by its id, in order.
+    pub observed: RefCell<Vec<String>>,
     /// What each `command` step reports, by its id; running until set.
     pub commands: RefCell<BTreeMap<String, Observed>>,
 }
@@ -392,6 +394,8 @@ impl Step for World {
     }
 
     fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
+        self.observed.borrow_mut().push(step.id.clone());
+
         match step.kind.as_str() {
             "worktree" if run.worktree.is_some() => Ok(Observed::Settled(atelier_core::Outcome {
                 name: "passed".into(),

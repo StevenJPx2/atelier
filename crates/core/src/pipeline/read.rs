@@ -85,9 +85,12 @@ impl Pipeline {
             read.push(step);
         }
 
+        let plan = super::lower::lower(&read).map_err(refuse)?;
+
         Ok(Self {
             name: name.to_owned(),
             steps: read,
+            plan,
         })
     }
 }

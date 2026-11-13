@@ -2,6 +2,7 @@
 //! offers, checked when the config loads.
 
 mod kinds;
+mod lower;
 mod read;
 mod spec;
 
@@ -27,6 +28,7 @@ pub const FAILED: &str = "failed";
 pub struct Pipeline {
     name: String,
     steps: Vec<StepSpec>,
+    plan: rungs::Plan,
 }
 
 /// A pipeline the config describes but atelier cannot run, and why.
@@ -47,6 +49,12 @@ impl Pipeline {
     #[must_use]
     pub fn steps(&self) -> &[StepSpec] {
         &self.steps
+    }
+
+    /// The pipeline as rungs runs it: each step by its position here.
+    #[must_use]
+    pub const fn plan(&self) -> &rungs::Plan {
+        &self.plan
     }
 
     /// The step called `id`.

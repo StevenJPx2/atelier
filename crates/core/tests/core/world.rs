@@ -14,9 +14,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{
-    Agent, Brief, CiFile, Failure, Filter, Forge, Issue, IssueKey, Limits, Listing, Mark, Marks,
-    Observation, PluginError, Plugins, Project, PullRequest, Repo, Report, Session, Source, State,
-    Tracker, WorktreeRequest, Worktrees, act, observe,
+    Agent, Brief, CiFile, Failure, Filter, Forge, Issue, IssueKey, Kind, Kinds, Listing, Mark,
+    Marks, MemoryTree, Observation, Observed, Outcomes, Pipeline, PluginError, Plugins, Project,
+    PullRequest, Repo, Report, RunContext, Session, Setting, Settings, SettingsError, Source,
+    Started, State, Step, StepSpec, Tracker, Tree, WorktreeRequest, Worktrees, act, forge_kinds,
+    observe, observe_builder, observe_forge_step, start_forge_step,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,19 +45,91 @@ pub struct World {
     pub fail: RefCell<Option<(u32, Failure)>>,
     /// The project's filter for this tracker; the world honours its assignee.
     pub filter: RefCell<Filter>,
+    /// Each step started, by its id, in order.
+    pub started: RefCell<Vec<String>>,
+    /// What each `command` step reports, by its id; running until set.
+    pub commands: RefCell<BTreeMap<String, Observed>>,
 }
 
-/// A project on base `v2` with `red_rounds = 3` and the given stages.
-pub fn project(stages: &[(&str, u8)]) -> Project {
-    Project {
-        repo: Repo("o/r".into()),
-        local: PathBuf::from("/local"),
-        base: "v2".into(),
-        limits: Limits::new(3, stages.iter().copied()).unwrap(),
-    }
+fn text(value: &str) -> Setting {
+    Setting::Text(value.into())
+}
+
+/// A step's settings: its id, its kind, and the rest.
+pub fn step(id: &str, uses: &str, rest: &[(&str, Setting)]) -> Settings {
+    rest.iter().fold(
+        Settings::default()
+            .with("id", text(id))
+            .with("uses", text(uses)),
+        |step, (key, value)| step.with(key, value.clone()),
+    )
+}
+
+pub fn list(values: &[&str]) -> Setting {
+    Setting::List(values.iter().map(|value| text(value)).collect())
+}
+
+pub fn table(entries: &[(&str, &str)]) -> Setting {
+    Setting::Table(
+        entries
+            .iter()
+            .fold(Settings::default(), |table, (key, value)| {
+                table.with(key, text(value))
+            }),
+    )
+}
+
+/// The built-in build, written out, with three rounds of checks.
+pub fn build() -> Vec<Settings> {
+    vec![
+        step("worktree", "git.worktree", &[]),
+        step(
+            "builder",
+            "agent.session",
+            &[
+                ("brief", text("builder")),
+                ("outcomes", list(&["opened", "nothing"])),
+            ],
+        ),
+        step(
+            "checks",
+            "forge.checks",
+            &[
+                ("after", table(&[("builder", "opened")])),
+                ("rounds", Setting::Number(3)),
+                ("restart", Setting::Flag(true)),
+            ],
+        ),
+        step("ready", "forge.ready", &[]),
+        step("merge", "forge.merge", &[]),
+    ]
 }
 
 impl World {
+    /// A project on base `v2` whose `build` pipeline is `steps`.
+    pub fn project_with(&self, steps: &[Settings]) -> Project {
+        let kinds = Kinds::default()
+            .with("git", "mem", self)
+            .with("agent", "mem", self)
+            .with("forge", "mem", self)
+            .with("atelier", "mem", self);
+        let build = Pipeline::read("build", steps, &kinds, &MemoryTree::default()).unwrap();
+
+        Project {
+            repo: Repo("o/r".into()),
+            local: PathBuf::from("/local"),
+            base: "v2".into(),
+            forge: "mem".into(),
+            pipelines: vec![build],
+            steps: PathBuf::from("/steps"),
+        }
+    }
+
+    /// A project running the built-in build.
+    pub fn project(&self) -> Project {
+        self.project_with(&build())
+    }
+
     pub fn with_issue(id: &str, title: &str, marks: &[Mark]) -> Self {
         let world = Self::default();
         world.tickets.borrow_mut().insert(
@@ -89,6 +163,7 @@ impl World {
             forge: self,
             agent: self,
             worktrees: self,
+            steps: vec![("mem", self)],
         }
     }
 
@@ -247,5 +322,90 @@ impl Worktrees for World {
         self.change()?;
         self.worktrees.borrow_mut().remove(worktree);
         Ok(())
+    }
+}
+impl Step for World {
+    fn kinds(&self) -> Vec<Kind> {
+        let mut kinds = forge_kinds();
+        kinds.extend([
+            Kind {
+                name: "worktree",
+                outcomes: Outcomes::Own(&["passed"]),
+                resident: false,
+            },
+            Kind {
+                name: "session",
+                outcomes: Outcomes::Named,
+                resident: true,
+            },
+            Kind {
+                name: "command",
+                outcomes: Outcomes::Own(&["passed"]),
+                resident: false,
+            },
+        ]);
+        kinds
+    }
+
+    fn configure(
+        &self,
+        _: &str,
+        settings: &Settings,
+        _: &dyn Tree,
+    ) -> Result<Settings, SettingsError> {
+        Ok(settings.clone())
+    }
+
+    fn start(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Started, PluginError> {
+        self.started.borrow_mut().push(step.id.clone());
+
+        match step.kind.as_str() {
+            "worktree" => {
+                let request = WorktreeRequest {
+                    repo: run.repo,
+                    local: run.local,
+                    name: run.name,
+                    branch: run.branch,
+                    base: run.base,
+                };
+
+                Ok(Started::Worktree(self.create(&request)?))
+            }
+            "session" => {
+                let worktree = run
+                    .worktree
+                    .ok_or_else(|| PluginError::permanent("the session has no worktree"))?;
+
+                Ok(Started::Session(Agent::start(
+                    self,
+                    worktree,
+                    run.brief,
+                    run.session,
+                )?))
+            }
+            "command" => {
+                self.change()?;
+                Ok(Started::Nothing)
+            }
+            kind => start_forge_step(kind, run),
+        }
+    }
+
+    fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
+        match step.kind.as_str() {
+            "worktree" if run.worktree.is_some() => Ok(Observed::Settled(atelier_core::Outcome {
+                name: "passed".into(),
+                why: "made".into(),
+            })),
+            "worktree" => Ok(Observed::Running),
+            "session" => Ok(observe_builder(run)),
+            "command" => Ok(self
+                .commands
+                .borrow()
+                .get(&step.id)
+                .cloned()
+                .unwrap_or(Observed::Running)),
+            kind => observe_forge_step(kind, run),
+        }
     }
 }

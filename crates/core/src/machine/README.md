@@ -1,38 +1,42 @@
-# The issue machine
+# The run machine
 
-One pure function moves an issue from phase to phase:
-`step(phase, event, &limits)` returns the next phase and the actions that
-carry the move out. It does no I/O, so every pair of phase and event can be
-checked, and Kani proves its promises for every one.
+One pure function moves a run of a pipeline: `step(run, event, &plan)`
+returns the next run and the actions that carry the move out. A run is its
+phase and each step's progress; rungs decides which steps start, which are
+skipped, and when the run is over. It does no I/O, so Kani proves its
+promises for every pipeline of up to four steps.
 
 ```mermaid
 stateDiagram-v2
     direction LR
     [*] --> Claiming: Requested
-    Claiming --> Preparing: Claimed
-    Preparing --> Starting: WorktreeReady
-    Starting --> Building: AgentStarted
-    Building --> Open: PullRequestOpened
-    Open --> Stage: AllPassed
-    Stage --> Green: StagePassed, the last
-    Green --> Ready: MarkedReady
-    Ready --> Done: Merged
+    Claiming --> Running: Claimed, the first steps start
+    Running --> Running: a step settles, fails a round or runs again
+    Running --> Done: no step runs and none can start
+    Running --> Blocked: a final failure no step waits for
+    Running --> Stopped: Unmarked, IssueClosed
 ```
 
 | File        | Holds                                               |
 | ----------- | --------------------------------------------------- |
-| `phase.rs`  | `Phase`, `Reason` and `Event`                       |
+| `phase.rs`  | `Run`, its `Phase`, `Reason` and `Event`            |
 | `action.rs` | `Action` and the `Mark`s a tracker shows a person   |
-| `limits.rs` | `Limits`: `red_rounds` and each stage's round limit |
-| `step.rs`   | `step`, the whole machine as one `match`            |
-| `proofs.rs` | The Kani harness, under `cfg(kani)`                 |
+| `step.rs`   | `step`, the whole machine as one `match` over rungs |
+| `proofs.rs` | The Kani harnesses, under `cfg(kani)`               |
 
 ```rust
-let limits = Limits::new(5, [("critic", 2)])?;
+let plan = pipeline.plan();
 
-let (next, actions) = step(Phase::Open { rounds: 4 }, Event::RoundFailed, &limits);
-// → Blocked(RedRounds), [Interrupt, Unmark(Working), Mark(Blocked), Comment(RedRounds)]
+let (next, actions) = step(run, Event::Settled { step: 0, outcome: Outcome(0) }, plan);
+// → Running, [Start(1), Start(2)]: deps and audit, side by side
 ```
+
+- A failed round under a step's `rounds` starts it again; its last one is
+  final, and blocks the run unless a step waits for it.
+- A push restarts a settled step and every step after it that depends on
+  it; failed rounds are kept.
+- Done, Blocked and Stopped each interrupt the resident steps, remove the
+  working mark and remove the worktree.
 
 ```sh
 cargo kani -p atelier-core

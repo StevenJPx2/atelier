@@ -14,7 +14,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
-    Kind, Outcomes, Plugin, Repo, Setting, Settings, Step, Tree, WorktreeRequest, Worktrees,
+    Brief, Issue, IssueKey, Kind, Marks, Needs, Observed, Outcome, Outcomes, Plugin, Repo,
+    RunContext, Setting, Settings, Started, Step, StepSpec, Tree, WorktreeRequest, Worktrees,
 };
 use atelier_git::{Git, Repository};
 
@@ -465,4 +466,66 @@ fn a_worktree_of_a_checkout_gets_hooks_and_the_checkout_keeps_its_own() {
         "false"
     );
     assert_eq!(run(&checkout, &["status", "--short"]), "");
+}
+#[test]
+fn the_worktree_step_makes_the_run_s_worktree_and_passes_once_the_run_keeps_it() {
+    let fixture = Fixture::new();
+    let issue = Issue {
+        key: IssueKey {
+            tracker: "github".into(),
+            id: "12".into(),
+        },
+        title: "Fix the dead link".into(),
+        open: true,
+        marks: Marks::default(),
+    };
+    let brief = Brief::new("#12", &issue, BRANCH, "v2");
+    let spec = StepSpec {
+        id: "worktree".into(),
+        uses: "git.worktree".into(),
+        plugin: "git",
+        kind: "worktree".into(),
+        needs: Needs::default(),
+        outcomes: vec!["passed".into()],
+        rounds: 1,
+        restart: false,
+        resident: false,
+        settings: Settings::default(),
+    };
+    let mut run = RunContext {
+        repo: &fixture.repo,
+        local: &fixture.local,
+        base: "v2",
+        issue: &issue,
+        name: "issue-12",
+        branch: BRANCH,
+        worktree: None,
+        folder: &fixture.scratch.0,
+        brief: &brief,
+        session: None,
+        pull_request: None,
+        failed: 0,
+        settled: false,
+    };
+
+    let started = fixture.git.start(&run, &spec).unwrap();
+    let waiting = fixture.git.observe(&run, &spec).unwrap();
+    let made = fixture.expected();
+    run.worktree = Some(&made);
+    let passed = fixture.git.observe(&run, &spec).unwrap();
+
+    assert_eq!(started, Started::Worktree(fixture.expected()));
+    assert_eq!(run_in(&made), BRANCH);
+    assert_eq!(waiting, Observed::Running);
+    assert_eq!(
+        passed,
+        Observed::Settled(Outcome {
+            name: "passed".into(),
+            why: format!("made {}", made.display()),
+        })
+    );
+}
+
+fn run_in(tree: &Path) -> String {
+    run(tree, &["rev-parse", "--abbrev-ref", "HEAD"])
 }

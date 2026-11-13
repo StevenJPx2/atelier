@@ -1,6 +1,11 @@
 //! The forge's kinds of step.
 
-use atelier_core::{Kind, MemoryTree, Outcomes, Plugin, Registry, Setting, Settings, Step};
+use std::path::Path;
+
+use atelier_core::{
+    Brief, Issue, IssueKey, Kind, Marks, MemoryTree, Needs, Observed, Outcome, Outcomes, Plugin,
+    PullRequest, Registry, Repo, Rollup, RunContext, Setting, Settings, Started, Step, StepSpec,
+};
 use atelier_github::GitHub;
 
 #[test]
@@ -62,4 +67,68 @@ fn github_registers_its_kinds_as_the_forge() {
     .unwrap();
 
     assert_eq!(pipeline.steps()[0].resolved(), "github.checks");
+}
+fn step(kind: &str) -> StepSpec {
+    StepSpec {
+        id: kind.into(),
+        uses: format!("forge.{kind}"),
+        plugin: "github",
+        kind: kind.into(),
+        needs: Needs::default(),
+        outcomes: vec!["passed".into()],
+        rounds: 1,
+        restart: false,
+        resident: false,
+        settings: Settings::default(),
+    }
+}
+
+#[test]
+fn the_forge_s_steps_read_the_pull_request_on_the_run_s_branch() {
+    let issue = Issue {
+        key: IssueKey {
+            tracker: "github".into(),
+            id: "12".into(),
+        },
+        title: "Fix the dead link".into(),
+        open: true,
+        marks: Marks::default(),
+    };
+    let brief = Brief::new("#12", &issue, "issue-12", "main");
+    let repo = Repo("StevenJPx2/atelier".into());
+    let run = RunContext {
+        repo: &repo,
+        local: Path::new("/clones/atelier.git"),
+        base: "main",
+        issue: &issue,
+        name: "issue-12",
+        branch: "issue-12",
+        worktree: None,
+        folder: Path::new("/steps"),
+        brief: &brief,
+        session: None,
+        pull_request: Some(PullRequest::Open {
+            number: 8,
+            draft: true,
+            failed_rounds: 0,
+            checks: Rollup::Passed,
+        }),
+        failed: 0,
+        settled: false,
+    };
+    let github = GitHub::new();
+
+    let told = github.start(&run, &step("ready")).unwrap();
+    let checks = github.observe(&run, &step("checks")).unwrap();
+    let ready = github.observe(&run, &step("ready")).unwrap();
+
+    assert!(matches!(told, Started::Tell(text) if text.contains("Every check passed")));
+    assert_eq!(
+        checks,
+        Observed::Settled(Outcome {
+            name: "passed".into(),
+            why: "every check passed".into(),
+        })
+    );
+    assert_eq!(ready, Observed::Running);
 }

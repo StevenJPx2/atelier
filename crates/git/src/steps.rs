@@ -1,6 +1,9 @@
 //! `git` as a plugin: the `git.worktree` kind of step.
 
-use atelier_core::{Kind, Outcomes, Plugin, Registry, Settings, SettingsError, Step, Tree};
+use atelier_core::{
+    Kind, Observed, Outcome, Outcomes, Plugin, PluginError, Registry, RunContext, Settings,
+    SettingsError, Started, Step, StepSpec, Tree, WorktreeRequest, Worktrees,
+};
 
 use crate::Git;
 
@@ -34,5 +37,28 @@ impl Step for Git {
         settings.only("", &[])?;
 
         Ok(settings.clone())
+    }
+
+    /// Makes the run's worktree on its branch, or reuses it.
+    fn start(&self, run: &RunContext<'_>, _: &StepSpec) -> Result<Started, PluginError> {
+        let request = WorktreeRequest {
+            repo: run.repo,
+            local: run.local,
+            name: run.name,
+            branch: run.branch,
+            base: run.base,
+        };
+
+        Ok(Started::Worktree(self.create(&request)?))
+    }
+
+    /// Passed once the run keeps its worktree.
+    fn observe(&self, run: &RunContext<'_>, _: &StepSpec) -> Result<Observed, PluginError> {
+        Ok(run.worktree.map_or(Observed::Running, |worktree| {
+            Observed::Settled(Outcome {
+                name: "passed".to_owned(),
+                why: format!("made {}", worktree.display()),
+            })
+        }))
     }
 }

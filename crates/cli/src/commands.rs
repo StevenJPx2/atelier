@@ -2,7 +2,8 @@
 
 use std::path::Path;
 
-use atelier_core::{CiFile, Pipeline, Repo};
+use atelier_core::rungs::Status;
+use atelier_core::{CiFile, Phase, Pipeline, Reason, Record, Repo};
 use atelier_git::{Repository, WorkingTree};
 use atelier_github::GitHub;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
@@ -143,6 +144,7 @@ pub fn status(paths: &Paths) -> Result<()> {
 
     for entry in projects::read(&paths.projects())? {
         let local = clone::of(paths, &entry.repo)?;
+        let mut pipelines = Vec::new();
         println!("{}  {}", entry.repo, local.path().display());
 
         if local.exists() {
@@ -156,12 +158,13 @@ pub fn status(paths: &Paths) -> Result<()> {
             });
 
             match resolved {
-                Ok((resolved, pipelines)) => {
+                Ok((resolved, read)) => {
                     for (name, value, origin) in &resolved.shown {
                         println!("  {name:<11} {value:<24} {origin}");
                     }
 
-                    show(&pipelines, &resolved.pipelines);
+                    show(&read, &resolved.pipelines);
+                    pipelines = read;
                 }
                 Err(error) => println!("  settings: {error:#}"),
             }
@@ -173,25 +176,77 @@ pub fn status(paths: &Paths) -> Result<()> {
             continue;
         };
 
-        for (key, record) in &state.issues {
-            let key = key.to_string();
-            let phase = state::shown(record.phase);
-            let session = record
-                .session
-                .as_ref()
-                .map_or("-", |session| session.id.as_str());
-            let pull_request = record
-                .pull_request
-                .map_or_else(|| "-".to_owned(), |number| format!("#{number}"));
+        for (key, record) in &state.runs {
+            let pipeline = pipelines
+                .iter()
+                .find(|pipeline| pipeline.name() == record.pipeline);
 
-            println!(
-                "  {key:<11} {phase:<24} {}  {session}  {pull_request}",
-                record.branch
-            );
+            run(&key.to_string(), record, pipeline);
         }
     }
 
     Ok(())
+}
+
+/// One run: its item, pipeline and phase, its branch, session and pull
+/// request, then each step's status.
+fn run(key: &str, record: &Record, pipeline: Option<&Pipeline>) {
+    let phase = format!("{} {}", record.pipeline, phase(record));
+    let session = record
+        .sessions()
+        .next()
+        .map_or("-", |session| session.id.as_str());
+    let pull_request = record
+        .pull_request
+        .map_or_else(|| "-".to_owned(), |number| format!("#{number}"));
+
+    println!(
+        "  {key:<11} {phase:<24} {}  {session}  {pull_request}",
+        record.branch
+    );
+
+    let steps: Vec<String> = record
+        .steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| {
+            let spec = pipeline.and_then(|pipeline| pipeline.steps().get(index));
+            let failed = record.progress.failed.get(index).copied().unwrap_or(0);
+            let status = match record.progress.status.get(index) {
+                Some(Status::Settled(outcome)) => spec
+                    .and_then(|spec| spec.outcome_name(*outcome))
+                    .map_or_else(|| format!("outcome {}", outcome.0), str::to_owned),
+                Some(Status::Running) => "running".to_owned(),
+                Some(Status::Skipped) => "skipped".to_owned(),
+                Some(Status::Pending) | None => "pending".to_owned(),
+            };
+            let rounds = match failed {
+                0 => String::new(),
+                1 => " (1 failed round)".to_owned(),
+                _ => format!(" ({failed} failed rounds)"),
+            };
+
+            format!("{} {status}{rounds}", step.id)
+        })
+        .collect();
+
+    if !steps.is_empty() {
+        println!("    {}", steps.join(", "));
+    }
+}
+
+/// The run's phase as a person reads it, such as `Blocked at checks`.
+fn phase(record: &Record) -> String {
+    match record.phase {
+        Phase::Blocked(Reason::Failed(step)) => format!("Blocked at {}", record.step_id(step)),
+        Phase::Blocked(Reason::Start(step)) => {
+            format!("Blocked starting {}", record.step_id(step))
+        }
+        Phase::Blocked(Reason::Claim) => "Blocked claiming".to_owned(),
+        Phase::Blocked(Reason::Changed) => "Blocked, changed".to_owned(),
+        Phase::Blocked(Reason::LostTrack) => "Blocked, lost track".to_owned(),
+        other => format!("{other:?}"),
+    }
 }
 /// Each pipeline, where it came from, and each step's kind, with the
 /// plugin a role's kind resolved to, such as `forge.checks → github.checks`.

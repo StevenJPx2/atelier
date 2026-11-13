@@ -3,7 +3,7 @@
 
 use atelier_commands::Commands;
 use atelier_core::{
-    Agent, Checks, Filter, Forge, Pipeline, Plugin, Plugins, Registry, Source, Tracker, Tree,
+    Agent, Checks, Filter, Forge, Pipeline, Plugin, Plugins, Registry, Source, Step, Tracker, Tree,
 };
 use atelier_git::Git;
 use atelier_github::GitHub;
@@ -28,6 +28,7 @@ pub struct Built<'a> {
     trackers: Vec<(String, Box<dyn Tracker + 'a>, Filter)>,
     forge: &'a dyn Forge,
     agent: &'a dyn Agent,
+    steps: Vec<(&'static str, &'a dyn Step)>,
 }
 
 impl Build {
@@ -154,12 +155,13 @@ impl Build {
             trackers,
             forge: registry.find_forge(&resolved.forge)?,
             agent: registry.find_agent(resolved.agent.as_deref())?,
+            steps: registry.steps(),
         })
     }
 }
 
 impl Built<'_> {
-    /// The trackers' tracker for `name`, such as for `atelier init`.
+    /// The plugins a poll goes through, with `git` for worktrees.
     pub fn plugins<'b>(&'b self, git: &'b Git) -> Plugins<'b> {
         Plugins {
             trackers: self
@@ -174,6 +176,7 @@ impl Built<'_> {
             forge: self.forge,
             agent: self.agent,
             worktrees: git,
+            steps: self.steps.clone(),
         }
     }
 }

@@ -1,19 +1,19 @@
 use std::collections::BTreeMap;
 
 use super::{Plugins, Project, Record, State};
-use crate::{Filter, Issue, IssueKey, Listing, Mark, PluginError, Seen};
+use crate::{Filter, Issue, IssueKey, Listing, Mark, Phase, PluginError, Seen};
 
 /// What one poll saw of a project.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Observation {
-    pub issues: BTreeMap<IssueKey, Observed>,
+    pub issues: BTreeMap<IssueKey, Watched>,
     /// Listing tags to keep once every issue is acted on.
     pub etags: BTreeMap<(String, Mark), String>,
 }
 
 /// One issue as the poll saw it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Observed {
+pub struct Watched {
     pub issue: Issue,
     pub seen: Seen,
 }
@@ -23,7 +23,8 @@ pub struct Observed {
 const LISTED: [Mark; 2] = [Mark::Build, Mark::Working];
 
 /// Asks the project's trackers what changed, reads every issue atelier is
-/// working on, and asks the forge for each builder's pull request.
+/// working on, and asks the forge for the pull request of each run whose
+/// pipeline has a step of the forge's.
 ///
 /// # Errors
 ///
@@ -41,7 +42,7 @@ pub fn observe(
         }
     }
 
-    for (key, record) in &state.issues {
+    for (key, record) in &state.runs {
         if !record.phase.is_working() || observation.issues.contains_key(key) {
             continue;
         }
@@ -55,11 +56,17 @@ pub fn observe(
     }
 
     for (key, observed) in &mut observation.issues {
-        let Some(record) = state.issues.get(key) else {
+        let Some(record) = state.runs.get(key) else {
             continue;
         };
+        let forged = project.pipeline(&record.pipeline).is_some_and(|pipeline| {
+            pipeline
+                .steps()
+                .iter()
+                .any(|step| step.plugin == project.forge)
+        });
 
-        if record.phase.has_builder() {
+        if record.phase == Phase::Running && forged {
             observed.seen.pull_request =
                 plugins.forge.pull_request(&project.repo, &record.branch)?;
         }
@@ -103,22 +110,21 @@ fn list(
     Ok(())
 }
 
-const fn observed(issue: Issue) -> Observed {
+const fn observed(issue: Issue) -> Watched {
     let seen = Seen {
         open: issue.open,
         marks: issue.marks,
         pull_request: None,
-        stage: None,
     };
 
-    Observed { issue, seen }
+    Watched { issue, seen }
 }
 
 impl State {
-    /// The issue's record, made when atelier first takes it.
-    pub(crate) fn record(&mut self, issue: &Issue) -> &mut Record {
-        self.issues
+    /// The item's run, made when atelier first takes it.
+    pub(crate) fn record(&mut self, issue: &Issue, pipeline: &str) -> &mut Record {
+        self.runs
             .entry(issue.key.clone())
-            .or_insert_with(|| Record::new(&issue.key, &issue.title))
+            .or_insert_with(|| Record::new(&issue.key, &issue.title, pipeline))
     }
 }

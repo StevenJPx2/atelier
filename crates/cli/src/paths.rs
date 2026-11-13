@@ -62,6 +62,12 @@ impl Paths {
         self.data.join("worktrees")
     }
 
+    /// What each run's steps keep between polls, such as a command's
+    /// output, by project.
+    pub fn steps(&self) -> PathBuf {
+        self.state.join("steps")
+    }
+
     /// The hooks folder builders' worktrees use, holding `pre-commit`.
     pub fn hooks(&self) -> PathBuf {
         self.data.join("hooks")

@@ -1,46 +1,115 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::{Action, IssueKey, Mark, Phase, Session};
+use rungs::Progress;
 
-/// What atelier keeps of a project between polls: each issue it took and
-/// the trackers' listing tags. The tracker's marks stay the source of truth.
+use crate::{Action, IssueKey, Mark, Phase, Pipeline, Run, Session};
+
+/// What atelier keeps of a project between polls: each item's run and the
+/// trackers' listing tags. The tracker's marks stay the source of truth.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct State {
-    pub issues: BTreeMap<IssueKey, Record>,
+    pub runs: BTreeMap<IssueKey, Record>,
     pub etags: BTreeMap<(String, Mark), String>,
 }
 
-/// One issue atelier took. `pending` holds the actions of its last step not
-/// yet carried out, so a stop between actions resumes where it was.
+/// One item's run of a pipeline; an item has one run at a time. `pending`
+/// holds the actions of its last move not yet carried out, so a stop
+/// between actions resumes where it was.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
+    pub pipeline: String,
     pub phase: Phase,
+    /// Each step's status and failed rounds, by its position.
+    pub progress: Progress,
+    /// What each step keeps, in the pipeline's order.
+    pub steps: Vec<StepRecord>,
     pub title: String,
     pub branch: String,
     pub worktree: Option<PathBuf>,
-    pub session: Option<Session>,
     /// The number of the pull request on its branch, once a poll saw one.
     pub pull_request: Option<u64>,
     pub pending: Vec<Action>,
+}
+
+/// What a run keeps of one step: its session, once a start made one, and
+/// why it last settled or failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepRecord {
+    pub id: String,
+    pub session: Option<Session>,
+    pub why: Option<String>,
 }
 
 /// The longest branch slug, so a branch name stays readable.
 const SLUG_CHARS: usize = 40;
 
 impl Record {
-    /// An untracked issue's record, on branch `issue-<id>-<slug>`.
+    /// An untracked run of `pipeline`, on branch `issue-<id>-<slug>`.
     #[must_use]
-    pub fn new(key: &IssueKey, title: &str) -> Self {
+    pub fn new(key: &IssueKey, title: &str, pipeline: &str) -> Self {
         Self {
+            pipeline: pipeline.to_owned(),
             phase: Phase::Untracked,
+            progress: Progress::default(),
+            steps: Vec::new(),
             title: title.to_owned(),
             branch: branch(key, title),
             worktree: None,
-            session: None,
             pull_request: None,
             pending: Vec::new(),
         }
+    }
+
+    /// Its phase and progress, as the machine moves them.
+    #[must_use]
+    pub const fn run(&self) -> Run {
+        Run {
+            phase: self.phase,
+            progress: self.progress,
+        }
+    }
+
+    /// Each session its steps made, in order.
+    pub fn sessions(&self) -> impl Iterator<Item = &Session> {
+        self.steps.iter().filter_map(|step| step.session.as_ref())
+    }
+
+    /// The id of the step at `index`, or its number.
+    #[must_use]
+    pub fn step_id(&self, index: u8) -> String {
+        self.steps
+            .get(usize::from(index))
+            .map_or_else(|| format!("step {index}"), |step| step.id.clone())
+    }
+
+    /// Whether its steps are `pipeline`'s, in order.
+    #[must_use]
+    pub fn follows(&self, pipeline: &Pipeline) -> bool {
+        self.steps
+            .iter()
+            .map(|step| step.id.as_str())
+            .eq(pipeline.steps().iter().map(|step| step.id.as_str()))
+    }
+
+    /// Takes `pipeline`'s steps for a fresh run, keeping each step's last
+    /// session, which its next start replaces.
+    pub fn begin(&mut self, pipeline: &Pipeline) {
+        let last = std::mem::take(&mut self.steps);
+
+        pipeline.name().clone_into(&mut self.pipeline);
+        self.steps = pipeline
+            .steps()
+            .iter()
+            .map(|step| StepRecord {
+                id: step.id.clone(),
+                session: last
+                    .iter()
+                    .find(|kept| kept.id == step.id)
+                    .and_then(|kept| kept.session.clone()),
+                why: None,
+            })
+            .collect();
     }
 
     /// The worktree's folder name, `issue-<id>`.
@@ -126,7 +195,7 @@ mod tests {
         ];
 
         for (key, title, branch) in cases {
-            assert_eq!(Record::new(&key, title).branch, branch, "{title}");
+            assert_eq!(Record::new(&key, title, "build").branch, branch, "{title}");
         }
 
         assert_eq!(Record::folder(&key("jira", "CHF-12")), "issue-chf-12");

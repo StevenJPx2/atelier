@@ -18,7 +18,7 @@ redirects readers to the corresponding page in the hub. Paths under
 | `.vitepress/theme/index.ts`    | Draws `mermaid` blocks in the site's font and colours, again when the page or the colour scheme changes     |
 | `.vitepress/theme/mermaid.css` | How a diagram sits in its column, and opened full screen                                                    |
 | `cloudflare.config.ts`         | The Worker and its account; `wrangler.config.ts` names the folder it serves                                 |
-| `redirect/_redirects`          | Maps legacy plan and audit paths to `/atelier/docs/`, and repository-relative paths to `/atelier/` |
+| `redirect/_redirects`          | Maps legacy plan and audit paths to `/atelier/docs/`, and repository-relative paths to `/atelier/`          |
 
 - **Run:** `bun install`, then `bun run dev`.
 - **Build:** `bun run build` writes `.vitepress/dist/`, and fails on a dead

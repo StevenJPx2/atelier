@@ -18,7 +18,7 @@ pub use checks::{
 pub use machine::{Action, Event, Limits, LimitsError, Mark, Phase, Reason, step};
 pub use plugin::{MakeChecks, MakeTracker, MissingPlugin, On, Plugin, Registry, Role};
 pub use poll::{
-    Observation, Observed, Plugins, Project, Record, Report, Source, State, Step, act, observe,
+    Move, Observation, Observed, Plugins, Project, Record, Report, Source, State, act, observe,
 };
 pub use roles::{
     Agent, CiFile, Failure, Filter, Forge, Issue, IssueKey, Listing, PluginError, Repo, Session,

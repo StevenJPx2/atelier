@@ -1,9 +1,9 @@
 //! Kani harnesses for the issue machine.
 
-use super::pipeline::MAX_STAGES;
-use super::{Action, Event, Mark, Phase, Pipeline, step};
+use super::limits::MAX_STAGES;
+use super::{Action, Event, Limits, Mark, Phase, step};
 
-fn any_pipeline(count: u8) -> Pipeline {
+fn any_limits(count: u8) -> Limits {
     let red_rounds: u8 = kani::any();
     kani::assume((1..=5).contains(&red_rounds));
 
@@ -15,14 +15,14 @@ fn any_pipeline(count: u8) -> Pipeline {
         }
     }
 
-    Pipeline::unnamed(red_rounds, limits, count)
+    Limits::unnamed(red_rounds, limits, count)
 }
 
-fn reachable(phase: Phase, pipeline: &Pipeline) -> bool {
-    let rounds_fit = phase.rounds() <= pipeline.red_rounds();
+fn reachable(phase: Phase, limits: &Limits) -> bool {
+    let rounds_fit = phase.rounds() <= limits.red_rounds();
 
     let index_fits = match phase {
-        Phase::Stage { index, .. } => index < pipeline.stages(),
+        Phase::Stage { index, .. } => index < limits.stages(),
         _ => true,
     };
 
@@ -36,17 +36,17 @@ fn fair(event: Event) -> bool {
     }
 }
 
-/// For every phase an issue can be in, every event, and every pipeline of
+/// For every phase an issue can be in, every event, and all limits of
 /// `count` stages, `step` keeps the machine's promises.
 fn step_keeps_its_promises(count: u8) {
-    let pipeline = any_pipeline(count);
+    let limits = any_limits(count);
     let phase: Phase = kani::any();
     let event: Event = kani::any();
-    kani::assume(reachable(phase, &pipeline) && fair(event));
+    kani::assume(reachable(phase, &limits) && fair(event));
 
-    let (next, actions) = step(phase, event, &pipeline);
+    let (next, actions) = step(phase, event, &limits);
     let has = |action: Action| actions.contains(&action);
-    let stages = pipeline.stages();
+    let stages = limits.stages();
 
     assert_eq!(
         has(Action::StartBuilder),
@@ -86,7 +86,7 @@ fn step_keeps_its_promises(count: u8) {
         assert!(has(Action::CloseIssue));
     }
 
-    assert!(reachable(next, &pipeline));
+    assert!(reachable(next, &limits));
 
     if next == phase {
         assert!(actions.is_empty());

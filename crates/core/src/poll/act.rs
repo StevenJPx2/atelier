@@ -109,7 +109,7 @@ fn drive<E>(
             break;
         };
 
-        let (next, actions) = step(phase, event, &context.project.pipeline);
+        let (next, actions) = step(phase, event, &context.project.limits);
 
         if next == phase && actions.is_empty() {
             break;
@@ -223,7 +223,7 @@ fn perform(
         Action::StartStage(index) => {
             let name = context
                 .project
-                .pipeline
+                .limits
                 .stage_name(index)
                 .unwrap_or("unknown");
 
@@ -264,7 +264,7 @@ fn build(
                 issue,
                 &record.branch,
                 &project.base,
-                &project.pipeline,
+                &project.limits,
             )
             .with(tracker.brief(&project.repo, issue))
             .with(
@@ -326,11 +326,11 @@ fn blocked(reason: Reason, project: &Project) -> String {
             .to_owned(),
         Reason::RedRounds => format!(
             "atelier stopped the builder: CI failed {} rounds.",
-            project.pipeline.red_rounds()
+            project.limits.red_rounds()
         ),
         Reason::Stage(index) => format!(
             "atelier stopped the builder: the {} stage failed its last round.",
-            project.pipeline.stage_name(index).unwrap_or("unknown")
+            project.limits.stage_name(index).unwrap_or("unknown")
         ),
         Reason::Closed => {
             "atelier stopped the builder: its pull request was closed without merging.".to_owned()

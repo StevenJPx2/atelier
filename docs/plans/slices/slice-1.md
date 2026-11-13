@@ -63,7 +63,7 @@ of `machine/`, `poll/` and `roles/`, and the contract in
 `crates/core/prompts/builder.md`.
 
 ```rust
-let pipeline = Pipeline::new(5, [("critic", 2)])?;
+let limits = Limits::new(5, [("critic", 2)])?;
 
 let (next, actions) = step(Phase::Open { rounds: 4 }, Event::RoundFailed, &pipeline);
 // → Blocked(RedRounds), [Interrupt, Unmark(Working), Mark(Blocked), Comment(RedRounds)]
@@ -148,27 +148,27 @@ pub enum Action {
     Comment(Reason),
 }
 
-pub struct Pipeline {
+pub struct Limits {
     red_rounds: u8,
     limits: [u8; MAX_STAGES],
     count: u8,
     names: Vec<String>,
 }
 
-impl Pipeline {
+impl Limits {
     pub fn new<'a>(
         red_rounds: u8,
         stages: impl IntoIterator<Item = (&'a str, u8)>,
-    ) -> Result<Self, PipelineError>;
+    ) -> Result<Self, LimitsError>;
     pub const fn red_rounds(&self) -> u8;
     pub const fn stages(&self) -> u8;
     pub fn stage_name(&self, index: u8) -> Option<&str>;
     pub fn limit(&self, index: u8) -> Option<u8>;
 }
 
-pub enum PipelineError { NoRedRounds, NoStageRounds { stage }, TooManyStages { count } }
+pub enum LimitsError { NoRedRounds, NoStageRounds { stage }, TooManyStages { count } }
 
-pub fn step(phase: Phase, event: Event, pipeline: &Pipeline) -> (Phase, Vec<Action>);
+pub fn step(phase: Phase, event: Event, limits: &Limits) -> (Phase, Vec<Action>);
 ```
 
 `step` is one `match`. Every way out of a working phase removes the working
@@ -361,7 +361,7 @@ impl Brief {
         issue: &Issue,
         branch: &str,
         base: &str,
-        pipeline: &Pipeline,
+        limits: &Limits,
     ) -> Self;
     pub fn with(self, part: String) -> Self;
     pub fn deny(self, patterns: impl IntoIterator<Item = String>) -> Self;
@@ -379,7 +379,7 @@ issue; any other failure leaves the action pending and is reported. The
 listing tags are kept only when every issue succeeded.
 
 ```rust
-pub struct Project { pub repo: Repo, pub local: PathBuf, pub base: String, pub pipeline: Pipeline }
+pub struct Project { pub repo: Repo, pub local: PathBuf, pub base: String, pub limits: Limits }
 
 pub struct Source<'a> { pub name: &'a str, pub tracker: &'a dyn Tracker, pub filter: Filter }
 

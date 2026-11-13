@@ -2,14 +2,14 @@
 //! phase and the actions that carry it out.
 
 mod action;
+mod limits;
 mod phase;
-mod pipeline;
 mod step;
 
 #[cfg(kani)]
 mod proofs;
 
 pub use action::{Action, Mark};
+pub use limits::{Limits, LimitsError};
 pub use phase::{Event, Phase, Reason};
-pub use pipeline::{Pipeline, PipelineError};
 pub use step::step;

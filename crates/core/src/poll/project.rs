@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{Agent, Filter, Forge, Pipeline, Repo, Tracker, Worktrees};
+use crate::{Agent, Filter, Forge, Limits, Repo, Tracker, Worktrees};
 
 /// A watched project, with what its config and atelier found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,7 +8,7 @@ pub struct Project {
     pub repo: Repo,
     pub local: PathBuf,
     pub base: String,
-    pub pipeline: Pipeline,
+    pub limits: Limits,
 }
 
 /// One of a project's trackers, with its filter.

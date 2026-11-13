@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use atelier_core::{
-    Agent, Brief, Failure, Issue, IssueKey, Marks, Pipeline, Plugin, Registry, Session,
+    Agent, Brief, Failure, Issue, IssueKey, Limits, Marks, Plugin, Registry, Session,
 };
 use atelier_opencode::{OpenCode, rules};
 
@@ -129,7 +129,7 @@ fn brief() -> Brief {
         &issue,
         "issue-12-fix-the-dead-link",
         "v2",
-        &Pipeline::new(5, []).unwrap(),
+        &Limits::new(5, []).unwrap(),
     )
     .with("Open a draft pull request.".into())
     .deny(["gh pr merge *".into()])

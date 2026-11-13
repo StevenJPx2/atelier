@@ -237,15 +237,16 @@ pub trait Step {
         tree: &dyn Tree,
     ) -> Result<Settings, SettingsError>;
 
-    /// Starts the step for a run, or starts it again after a failed round.
-    fn start(&self, run: &RunContext, step: &StepSpec) -> Result<(), PluginError>;
+    /// Starts the step for a run, or starts it again after a failed round,
+    /// and returns at once: a worktree, a session, or words for the
+    /// resident steps.
+    fn start(&self, run: &RunContext<'_>, step: &StepSpec)
+        -> Result<Started, PluginError>;
 
-    /// What a poll sees: the outcome once the step settles.
-    fn observe(
-        &self,
-        run: &RunContext,
-        step: &StepSpec,
-    ) -> Result<Option<Outcome>, PluginError>;
+    /// What a poll sees: running, settled, a failed round, or, for a
+    /// settled step, that it runs again.
+    fn observe(&self, run: &RunContext<'_>, step: &StepSpec)
+        -> Result<Observed, PluginError>;
 }
 ```
 
@@ -446,17 +447,16 @@ and turns what rungs reports into actions:
 
 ```rust
 // rungs::Plan: positions, outcomes, needs, attempts
-let plan = pipeline.lower()?;
+let plan = pipeline.plan();
 
-// the run's progress from state.json
-let mut run = plan.resume(saved.progress)?;
+// worktree passed: deps and audit start side by side
+let settled = Event::Settled { step: 0, outcome: Outcome(0) };
+let (next, actions) = step(run, settled, plan);
+// → Running, [Start(1), Start(2)]
 
-run.settle(WORKTREE, PASSED)?;
-let start = run.advance();                     // → [deps, audit]: in parallel
-// core → [Start(deps), Start(audit)]
-
-run.restart(CHECKS);                           // a push
-// rungs::State::Over { unhandled: Some(i) } → Blocked at step i
+// a push restarts checks and the steps after it
+let (next, actions) = step(run, Event::Pushed { step: 2 }, plan);
+// rungs::State::Over { unhandled: Some(i) } → Blocked(Failed(i))
 ```
 
 ```mermaid
@@ -464,7 +464,7 @@ stateDiagram-v2
     direction LR
     [*] --> Pending
     Pending --> Running: its needs hold
-    Pending --> Skipped: its needs can no longer hold
+    Pending --> Skipped: its needs cannot hold
     Running --> Running: failed, under its rounds
     Running --> Settled: an outcome
     Running --> Pending: a push, at or after a restart point
@@ -480,26 +480,186 @@ stateDiagram-v2
   resident step that started, and remove the worktree.
 
 rungs proves its own promises
-([rungs#1](https://github.com/StevenJPx2/rungs/issues/1)). Core's Kani harness
-adds, over rungs, for every pipeline of up to four steps, every need, every
-status and every event:
+([rungs#1](https://github.com/StevenJPx2/rungs/issues/1)), for every plan of up
+to four steps: a step starts only when every step it names has settled or been
+skipped and its needs hold, it is skipped only when they cannot, a step fails
+at most its attempts, a restart keeps failed attempts, and `state` is Over
+only when no step runs and none can start. Core's two Kani harnesses prove
+what core adds over it:
 
-- The machine returns, and an event that does not apply changes nothing.
-- A step starts only when every step it names has settled or been skipped and
-  its needs hold; it is skipped only when they cannot.
-- A run never stalls: after any event, a step is running or the run is Done,
-  Blocked or Stopped.
-- Between two pushes, a step starts at most `rounds` times.
-- Every way out of a run removes the working mark and interrupts each resident
-  step that started.
-- Done comes only when no step is running and none can start.
+- For every answer rungs can give, the run follows it: a step starts exactly
+  when rungs started it, the run goes on exactly while rungs says it runs,
+  Done comes only when it is over with nothing unhandled, and a final failure
+  no step waits for blocks the run at that step. Each way out interrupts the
+  resident steps and removes the working mark and the worktree.
+- For every run and every event rungs plays no part in, an event that does
+  not apply changes nothing, a claim comes only from a request and starts
+  fresh, and every way out of a working run removes the working mark, and of
+  a running one interrupts its resident steps and removes the worktree.
 
 Tests with pipelines up to the limit of eight steps cover the rest, including
-the recorded event sequences of slices 1 and 2: the written-out `build` gives
-the same actions as today's machine.
+the recorded event sequences of slices 1 and 2 on the written-out `build`.
 
-Files: `crates/core/src/machine/`, rewritten over rungs, with `proofs.rs`. rungs
-itself is built first, in its own repository, and tagged `v0.1.0`.
+Files: `crates/core/src/machine/`, rewritten over rungs, with `proofs.rs`;
+`crates/core/src/pipeline/lower.rs`; `crates/core/src/forge_steps.rs`; and
+`crates/core/src/poll/`. rungs itself is built first, in its own repository,
+and tagged `v0.1.0`.
+
+#### Structure
+
+A checked pipeline keeps its steps as a rungs plan: each outcome by its place
+in the step's `outcomes`, `failed` as `Outcome::FAILED`, `rounds` as
+attempts, and needs by position.
+
+```rust
+impl Pipeline {
+    pub const fn plan(&self) -> &rungs::Plan;
+}
+
+impl StepSpec {
+    pub fn outcome(&self, name: &str) -> Option<Outcome>;
+    pub fn outcome_name(&self, outcome: Outcome) -> Option<&str>;
+}
+```
+
+A run is its phase and its steps' progress. `step` is pure and total: an
+event that does not apply leaves the run and names nothing. A request claims
+with fresh progress; a claim that fails also takes the build mark, so it is
+not requested again until a person asks. A failed round under a step's
+`rounds` names `Start` again; `last` makes it final at once, as a pull
+request closed without merging does. `Pushed` restarts only a settled step.
+
+```rust
+pub struct Run {
+    pub phase: Phase,
+    pub progress: Progress,
+}
+
+pub enum Phase { Untracked, Claiming, Running, Done, Blocked(Reason), Stopped }
+
+pub enum Reason { Claim, Start(u8), Failed(u8), Changed, LostTrack }
+
+pub enum Event {
+    Requested,
+    Claimed,
+    ClaimFailed,
+    Settled { step: u8, outcome: Outcome },
+    Failed { step: u8, last: bool },
+    StartFailed { step: u8 },
+    Pushed { step: u8 },
+    Changed,
+    Unmarked,
+    IssueClosed,
+    LostTrack,
+}
+
+pub enum Action {
+    Mark(Mark),
+    Unmark(Mark),
+    Start(u8),
+    Announce(u8),
+    Interrupt,
+    Report,
+    CloseIssue,
+    RemoveWorktree,
+    Comment(Reason),
+}
+
+pub fn step(run: Run, event: Event, plan: &rungs::Plan) -> (Run, Vec<Action>);
+```
+
+A step's plugin sees its run through a `RunContext`: the item, branch,
+worktree, its own folder, the builder's brief, its last session, the pull
+request the poll saw, and its failed rounds. A start returns what the run
+keeps, and an observation what the step did.
+
+```rust
+pub struct RunContext<'a> {
+    pub repo: &'a Repo,
+    pub local: &'a Path,
+    pub base: &'a str,
+    pub issue: &'a Issue,
+    pub name: &'a str,
+    pub branch: &'a str,
+    pub worktree: Option<&'a Path>,
+    pub folder: &'a Path,
+    pub brief: &'a Brief,
+    pub session: Option<&'a Session>,
+    pub pull_request: Option<PullRequest>,
+    pub failed: u8,
+    pub settled: bool,
+}
+
+pub enum Started { Nothing, Worktree(PathBuf), Session(Session), Tell(String) }
+
+pub enum Observed {
+    Running,
+    Settled(Outcome),
+    Failed { why: String, last: bool },
+    Restarted,
+}
+```
+
+Every forge's kinds read the pull request the forge reports, so
+`forge.checks` means the same on any forge. `checks` fails a round for each
+head commit with a failed check and passes when every check passed; once
+settled, a pending or newly failed head makes it run again. `ready` tells
+the resident steps every check passed and passes once the pull request is
+ready; `merge` settles `merged`. A pull request closed without merging fails
+each of them for good. The builder's step settles `opened` once a pull
+request is on its branch.
+
+```rust
+pub fn forge_kinds() -> Vec<Kind>;
+pub fn start_forge_step(kind: &str, run: &RunContext<'_>)
+    -> Result<Started, PluginError>;
+pub fn observe_forge_step(kind: &str, run: &RunContext<'_>)
+    -> Result<Observed, PluginError>;
+pub fn observe_builder(run: &RunContext<'_>) -> Observed;
+```
+
+`state.json` keeps each item's run: its pipeline, phase and progress, and
+for each step, in the pipeline's order, its session and why it last settled.
+A running run whose steps differ from its pipeline's, or whose progress
+the plan refuses, blocks as `Changed`. A request takes the pipeline's steps
+afresh and keeps each step's last session, which its next start replaces.
+
+```rust
+pub struct Project {
+    pub repo: Repo,
+    pub local: PathBuf,
+    pub base: String,
+    pub forge: String,
+    pub pipelines: Vec<Pipeline>,
+    pub steps: PathBuf,
+}
+
+pub struct Record {
+    pub pipeline: String,
+    pub phase: Phase,
+    pub progress: Progress,
+    pub steps: Vec<StepRecord>,
+    pub title: String,
+    pub branch: String,
+    pub worktree: Option<PathBuf>,
+    pub pull_request: Option<u64>,
+    pub pending: Vec<Action>,
+}
+
+pub struct StepRecord {
+    pub id: String,
+    pub session: Option<Session>,
+    pub why: Option<String>,
+}
+
+pub struct Move {
+    pub key: IssueKey,
+    pub pipeline: String,
+    pub from: Phase,
+    pub to: Phase,
+    pub what: String,
+}
+```
 
 ### `atelier finish` and `atelier stop`
 
@@ -527,7 +687,36 @@ and Ready is `merge` running.
 ### Verification
 
 - Kani as above, and the config check's refusals, one test each.
-- The recorded event sequences of slices 1 and 2, with the same actions.
+- The recorded event sequences of slices 1 and 2 on the written-out `build`,
+  against an in-memory world, with a stop after any save resuming to the same
+  end.
+
+```text
+for all started = which of the four steps rungs started
+for all state   = Running, or Over with no step or any one unhandled
+
+run, actions = conclude(started, state)
+
+assert actions start step i  ==  started[i]
+assert state is Running      implies run is Running, no mark removed
+assert state is Over(none)   implies run is Done, and it interrupts,
+                                     reports, closes, unmarks, removes
+assert state is Over(i)      implies run is Blocked at i, and it
+                                     interrupts, marks, unmarks, removes
+
+for all run   = every phase, every progress of up to four steps
+for all event = every event rungs plays no part in
+
+next, actions = step(run, event)
+
+assert next == run                       implies actions is empty
+assert next is Claiming, run was not     implies event is Requested,
+                                         progress is fresh
+assert run was working, next is not      implies the working mark goes
+assert run was Running, next is not      implies it interrupts and
+                                         removes the worktree
+```
+
 - `atelier.command`: a passing command, a failing one, and one past its time
   limit.
 - `atelier finish` and `atelier stop` against a running daemon in a temporary

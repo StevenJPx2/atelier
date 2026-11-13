@@ -1,27 +1,17 @@
-//! GitHub's kinds of step, as the forge: `checks`, `ready` and `merge`.
+//! GitHub's kinds of step, as the forge: `checks`, `ready` and `merge`,
+//! read from the pull request on the run's branch.
 
-use atelier_core::{Kind, Outcomes, Settings, SettingsError, Step, Tree};
+use atelier_core::{
+    Kind, Observed, PluginError, RunContext, Settings, SettingsError, Started, Step, StepSpec,
+    Tree, forge_kinds, observe_forge_step, start_forge_step,
+};
 
 use crate::GitHub;
 
-const PASSED: Outcomes = Outcomes::Own(&["passed"]);
-
 impl Step for GitHub {
-    /// `checks` passes when every check on the pull request's head passed,
-    /// `ready` when the pull request is marked ready, and `merge` settles
-    /// `merged` once a person merges it.
+    /// Every forge's kinds: `checks`, `ready` and `merge`.
     fn kinds(&self) -> Vec<Kind> {
-        let kind = |name, outcomes| Kind {
-            name,
-            outcomes,
-            resident: false,
-        };
-
-        vec![
-            kind("checks", PASSED),
-            kind("ready", PASSED),
-            kind("merge", Outcomes::Own(&["merged"])),
-        ]
+        forge_kinds()
     }
 
     /// None of them takes settings of its own.
@@ -34,5 +24,13 @@ impl Step for GitHub {
         settings.only("", &[])?;
 
         Ok(settings.clone())
+    }
+
+    fn start(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Started, PluginError> {
+        start_forge_step(&step.kind, run)
+    }
+
+    fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
+        observe_forge_step(&step.kind, run)
     }
 }

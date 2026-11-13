@@ -1,9 +1,11 @@
-//! atelier's core: the issue machine, the pipelines a project writes, the
-//! roles plugins fill, and which gates a change needs. It does no I/O, has no dependencies, and knows no
-//! language, tracker, forge or agent.
+//! atelier's core: the pipelines a project writes, the machine that runs
+//! them, the roles plugins fill, and which gates a change needs. Its one
+//! dependency is rungs, the step machine; it knows no language, tracker,
+//! forge or agent.
 
 mod brief;
 mod checks;
+mod forge_steps;
 mod machine;
 mod pipeline;
 mod plugin;
@@ -16,19 +18,22 @@ pub use brief::Brief;
 pub use checks::{
     Checks, Fix, Gate, MemoryTree, Override, Overrides, Planned, Root, Tree, fixes, gates,
 };
-pub use machine::{Action, Event, Limits, LimitsError, Mark, Phase, Reason, step};
+pub use forge_steps::{forge_kinds, observe_builder, observe_forge_step, start_forge_step};
+pub use machine::{Action, Event, Mark, Phase, Reason, Run, step};
 pub use pipeline::{
     FAILED, Kinds, MAX_STEPS, Need, Needs, PASSED, Pipeline, PipelineError, StepSpec,
 };
 pub use plugin::{MakeChecks, MakeTracker, MissingPlugin, On, Plugin, Registry, Role};
 pub use poll::{
-    Move, Observation, Observed, Plugins, Project, Record, Report, Source, State, act, observe,
+    Move, Observation, Plugins, Project, Record, Report, Source, State, StepRecord, Watched, act,
+    observe,
 };
 pub use roles::{
-    Agent, CiFile, Failure, Filter, Forge, Issue, IssueKey, Kind, Listing, Outcome, Outcomes,
-    PluginError, Repo, Session, Step, Tracker, WorktreeRequest, Worktrees,
+    Agent, CiFile, Failure, Filter, Forge, Issue, IssueKey, Kind, Listing, Observed, Outcome,
+    Outcomes, PluginError, Repo, RunContext, Session, Started, Step, Tracker, WorktreeRequest,
+    Worktrees,
 };
-pub use seen::{Marks, PullRequest, Rollup, Seen, StageOutcome, events};
+pub use seen::{Marks, PullRequest, Rollup, Seen};
 pub use settings::{Setting, Settings, SettingsError};
 
 /// The step machine pipelines run on.

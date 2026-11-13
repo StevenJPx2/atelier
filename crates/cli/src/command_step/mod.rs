@@ -1,16 +1,12 @@
 //! `atelier.command`: a shell command a pipeline runs in the run's
 //! worktree, with a time limit.
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "pipelines run their steps once the machine runs on rungs (#43)"
-    )
-)]
 pub mod run;
 
-use atelier_core::{Kind, Outcomes, Plugin, Registry, Settings, SettingsError, Step, Tree};
+use atelier_core::{
+    FAILED, Kind, Observed, Outcomes, Plugin, PluginError, Registry, RunContext, Settings,
+    SettingsError, Started, Step, StepSpec, Tree,
+};
 
 /// A command's time limit when its step sets none.
 pub const DEFAULT_TIMEOUT_SECS: i64 = 600;
@@ -71,13 +67,142 @@ impl Step for Atelier {
 
         Ok(settings.clone())
     }
+
+    /// Starts the command in the run's worktree, in the background.
+    fn start(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Started, PluginError> {
+        let worktree = run.worktree.ok_or_else(|| {
+            PluginError::permanent("a command runs in the run's worktree; git.worktree makes it")
+        })?;
+
+        run::start(run.folder, worktree, run.base, &step.settings)?;
+        Ok(Started::Nothing)
+    }
+
+    /// How the command ended, once it has.
+    fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
+        Ok(match run::observe(run.folder, &step.settings)? {
+            None => Observed::Running,
+            Some(outcome) if outcome.name == FAILED => Observed::Failed {
+                why: outcome.why,
+                last: false,
+            },
+            Some(outcome) => Observed::Settled(outcome),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use atelier_core::{MemoryTree, Setting};
+    use std::path::Path;
+    use std::time::{Duration, Instant};
+
+    use atelier_core::{Brief, Issue, IssueKey, Marks, MemoryTree, Needs, Repo, Setting};
 
     use super::*;
+
+    fn command(run: &str) -> StepSpec {
+        StepSpec {
+            id: "deps".into(),
+            uses: "atelier.command".into(),
+            plugin: "atelier",
+            kind: "command".into(),
+            needs: Needs::default(),
+            outcomes: vec!["passed".into()],
+            rounds: 1,
+            restart: false,
+            resident: false,
+            settings: Settings::default().with("run", Setting::Text(run.into())),
+        }
+    }
+
+    /// Calls `with` on a run in `worktree`, keeping the step's files in
+    /// `folder`.
+    fn with_run<T>(
+        worktree: Option<&Path>,
+        folder: &Path,
+        with: impl FnOnce(&RunContext<'_>) -> T,
+    ) -> T {
+        let issue = Issue {
+            key: IssueKey {
+                tracker: "github".into(),
+                id: "40".into(),
+            },
+            title: "Audit".into(),
+            open: true,
+            marks: Marks::default(),
+        };
+        let brief = Brief::new("#40", &issue, "issue-40", "main");
+        let repo = Repo("StevenJPx2/atelier".into());
+        let run = RunContext {
+            repo: &repo,
+            local: Path::new("/clones/atelier.git"),
+            base: "main",
+            issue: &issue,
+            name: "issue-40",
+            branch: "issue-40",
+            worktree,
+            folder,
+            brief: &brief,
+            session: None,
+            pull_request: None,
+            failed: 0,
+            settled: false,
+        };
+
+        with(&run)
+    }
+
+    /// What a poll sees once the command ended, within ten seconds.
+    fn ended(worktree: &Path, folder: &Path, step: &StepSpec) -> Observed {
+        let begun = Instant::now();
+
+        loop {
+            let seen = with_run(Some(worktree), folder, |run| Atelier.observe(run, step)).unwrap();
+
+            if seen != Observed::Running || begun.elapsed() > Duration::from_secs(10) {
+                return seen;
+            }
+
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn a_command_step_runs_in_the_worktree_and_settles_how_it_exits() {
+        let root = std::env::temp_dir().join(format!("atelier-step-{}", std::process::id()));
+        let worktree = root.join("worktree");
+        std::fs::create_dir_all(&worktree).unwrap();
+        let (pass, fail) = (command("true"), command("echo advisory; exit 2"));
+
+        let started = with_run(Some(&worktree), &root.join("pass"), |run| {
+            Atelier.start(run, &pass)
+        });
+        let passed = ended(&worktree, &root.join("pass"), &pass);
+        with_run(Some(&worktree), &root.join("fail"), |run| {
+            Atelier.start(run, &fail)
+        })
+        .unwrap();
+        let failed = ended(&worktree, &root.join("fail"), &fail);
+        let homeless = with_run(None, &root, |run| Atelier.start(run, &pass));
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(started, Ok(Started::Nothing));
+        assert_eq!(
+            passed,
+            Observed::Settled(atelier_core::Outcome {
+                name: "passed".into(),
+                why: "it exited 0".into(),
+            })
+        );
+        assert_eq!(
+            failed,
+            Observed::Failed {
+                why: "it exited 2:\nadvisory".into(),
+                last: false,
+            }
+        );
+        assert!(homeless.unwrap_err().is_permanent());
+    }
 
     fn configure(settings: &Settings) -> Result<Settings, String> {
         Atelier

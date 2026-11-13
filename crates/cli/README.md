@@ -32,14 +32,17 @@ StevenJPx2/chauffeur  /Users/me/.local/share/atelier/clones/StevenJPx2/chauffeur
     builder   agent.session → opencode.session
     checks    forge.checks → github.checks
     ...
-  github#6    Open { rounds: 1 }       issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
-  github#12   Building                 issue-12-fix-the-dead-link  ses_…  -
+  github#6    build Running            issue-6-docs-fix-the-dead-commit-messages-link  ses_…  #8
+    worktree passed, builder opened, checks running (1 failed round), ready pending, merge pending
+  github#12   build Running            issue-12-fix-the-dead-link  ses_…  -
+    worktree passed, builder running, checks pending, ready pending, merge pending
 ```
 
 Each pipeline shows its steps, each with its kind and the plugin a role's
 kind resolved to; a pipeline atelier cannot run shows instead of the
-settings, with its name and why. Each issue shows its phase, branch, session and pull request (`-` when it
-has none). `status` reads only `state.json`: the pull request's number is
+settings, with its name and why. Each run shows its pipeline and phase, its
+branch, session and pull request (`-` when it has none), then each step's
+status and failed rounds. `status` reads only `state.json`: the pull request's number is
 the one the daemon's last poll saw, so it makes no GitHub call.
 
 ```mermaid
@@ -75,13 +78,15 @@ flowchart LR
   `~/.local/share/atelier/clones`, never your checkout, so it needs no
   access to folders macOS guards, such as `~/Documents`.
 - **One owner per issue.** Each project polls on its own thread and owns its
-  issues, so two polls never claim the same issue and a slow project never
+  issues' runs, so two polls never claim the same issue and a slow project never
   holds up another.
 - **On disk before acting.** Every save waits for the writer to write
-  `state.json` (at most 30 s), so a phase is saved before its actions run.
+  `state.json` (at most 30 s), so a move is saved before its actions run.
+  Each step a command runs keeps its output under
+  `~/.local/state/atelier/steps`.
 - **Config from `origin`.** `.atelier/config.toml` is read from `origin`'s
   default branch; a `base` there names the base, and the rest is read from
-  `origin/<base>`. A branch or a pull request cannot change its limits.
+  `origin/<base>`. A branch or a pull request cannot change its pipelines.
 - **Timing.** A project polls every `poll` seconds (30 by default, at least
   15), again 5 s after it acted, and backs off on failure: as long as a rate
   limit asks, otherwise 30 s doubling to 10 minutes.

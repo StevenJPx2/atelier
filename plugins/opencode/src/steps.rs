@@ -1,6 +1,9 @@
 //! `OpenCode`'s kind of step, as the agent: `session`.
 
-use atelier_core::{Kind, Outcomes, Setting, Settings, SettingsError, Step, Tree};
+use atelier_core::{
+    Agent, Kind, Observed, Outcomes, PluginError, RunContext, Setting, Settings, SettingsError,
+    Started, Step, StepSpec, Tree, observe_builder,
+};
 
 use crate::OpenCode;
 
@@ -50,5 +53,35 @@ impl Step for OpenCode {
                 "is missing; a session takes a prompt file, or brief = \"builder\"",
             )),
         }
+    }
+
+    /// Starts a session in the run's worktree with its prompt, or the
+    /// builder's brief; starting again replaces the step's last session.
+    fn start(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Started, PluginError> {
+        let worktree = run.worktree.ok_or_else(|| {
+            PluginError::permanent("a session works in the run's worktree; git.worktree makes it")
+        })?;
+        let brief = match step.settings.text("", "text") {
+            Ok(Some(prompt)) => run.brief.prompted(prompt),
+            _ => run.brief.clone(),
+        };
+
+        Ok(Started::Session(Agent::start(
+            self,
+            worktree,
+            &brief,
+            run.session,
+        )?))
+    }
+
+    /// The builder settles `opened` once its pull request is open.
+    fn observe(&self, run: &RunContext<'_>, step: &StepSpec) -> Result<Observed, PluginError> {
+        let builder = step.settings.text("", "brief").ok().flatten() == Some(BUILDER);
+
+        Ok(if builder {
+            observe_builder(run)
+        } else {
+            Observed::Running
+        })
     }
 }

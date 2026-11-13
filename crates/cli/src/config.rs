@@ -1,11 +1,11 @@
 //! A project's settings: what atelier finds, and what `.atelier/config.toml`
-//! sets instead, read from `origin` so a branch cannot change its limits.
+//! sets instead, read from `origin` so a branch cannot change its pipelines.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use atelier_core::{Limits, Override, Overrides, Project, Repo, Setting, Settings};
+use atelier_core::{Override, Overrides, Project, Repo, Setting, Settings};
 use atelier_git::Repository;
 use color_eyre::eyre::{Result, WrapErr, bail, eyre};
 use serde::Deserialize;
@@ -19,8 +19,6 @@ const MIN_POLL_SECS: u64 = 15;
 
 const DEFAULT_POLL_SECS: u64 = 30;
 
-const DEFAULT_RED_ROUNDS: u8 = 5;
-
 /// `.atelier/config.toml`, as written: only what differs.
 #[derive(Debug, Clone, Default, Deserialize)]
 struct File {
@@ -31,10 +29,10 @@ struct File {
     agent: Option<String>,
     #[serde(default)]
     checks: Vec<String>,
-    #[serde(default)]
-    stages: Vec<String>,
-    #[serde(default)]
-    limits: BTreeMap<String, u8>,
+    /// Refused: a stage is a step of `[pipeline.build]`.
+    stages: Option<toml::Value>,
+    /// Refused: a limit is a step's `rounds`.
+    limits: Option<toml::Value>,
     poll: Option<u64>,
     #[serde(default)]
     paths: BTreeMap<String, PathFile>,
@@ -172,20 +170,19 @@ fn build(
     base: String,
     file: File,
 ) -> Result<Resolved> {
-    refuse_unbuilt("stage", &file.stages)?;
+    if file.stages.is_some() {
+        bail!("{CONFIG}: stages is unknown; a stage is a step of [pipeline.build]");
+    }
+
+    if file.limits.is_some() {
+        bail!(
+            "{CONFIG}: limits is unknown; set rounds on a step of [pipeline.build], such as checks"
+        );
+    }
+
     let checks = checks(&file)?;
     let overrides = overrides(&file.paths)?;
     let pipelines = pipelines(&file.pipeline)?;
-
-    let mut limits = file.limits.clone();
-    let red_rounds = limits.remove("red_rounds");
-
-    if let Some(key) = limits.keys().next() {
-        bail!("{CONFIG}: limits.{key} is unknown; it takes red_rounds");
-    }
-
-    let limits = Limits::new(red_rounds.unwrap_or(DEFAULT_RED_ROUNDS), [])
-        .map_err(|error| eyre!("{CONFIG}: {error}"))?;
 
     let poll = file.poll.unwrap_or(DEFAULT_POLL_SECS);
 
@@ -210,11 +207,6 @@ fn build(
             file.agent.clone().unwrap_or_else(|| "the only one".into()),
             set(file.agent.is_some()),
         ),
-        (
-            "red_rounds",
-            limits.red_rounds().to_string(),
-            set(red_rounds.is_some()),
-        ),
         ("poll", format!("{poll} s"), set(file.poll.is_some())),
         (
             "checks",
@@ -232,7 +224,9 @@ fn build(
             repo: Repo(entry.repo.clone()),
             local: local.path().to_owned(),
             base,
-            limits,
+            forge: forge.clone(),
+            pipelines: Vec::new(),
+            steps: std::path::PathBuf::new(),
         },
         trackers,
         checks,
@@ -333,15 +327,6 @@ fn overrides(paths: &BTreeMap<String, PathFile>) -> Result<Overrides> {
         })
         .collect::<Result<_>>()
         .map(Overrides)
-}
-
-/// The build has no stage plugins yet, so naming one fails as a missing
-/// plugin does.
-fn refuse_unbuilt(role: &str, names: &[String]) -> Result<()> {
-    match names.first() {
-        Some(name) => bail!("this atelier has no {role} plugin \"{name}\"; it has none"),
-        None => Ok(()),
-    }
 }
 
 fn trackers(entry: &Entry, platform: &str, tables: &[toml::Table]) -> Result<Vec<TrackerSpec>> {

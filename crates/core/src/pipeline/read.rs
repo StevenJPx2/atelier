@@ -18,8 +18,9 @@ impl Pipeline {
     /// configured by the plugin whose kind it uses.
     ///
     /// ```
-    /// use atelier_core::{Kind, Kinds, MemoryTree, Outcomes, Pipeline, Setting, Settings,
-    ///                    SettingsError, Step, Tree};
+    /// use atelier_core::{Kind, Kinds, MemoryTree, Observed, Outcomes, Pipeline, PluginError,
+    ///                    RunContext, Setting, Settings, SettingsError, Started, Step, StepSpec,
+    ///                    Tree};
     ///
     /// struct Git;
     ///
@@ -31,6 +32,14 @@ impl Pipeline {
     ///     fn configure(&self, _: &str, settings: &Settings, _: &dyn Tree)
     ///         -> Result<Settings, SettingsError> {
     ///         Ok(settings.clone())
+    ///     }
+    ///
+    ///     fn start(&self, _: &RunContext<'_>, _: &StepSpec) -> Result<Started, PluginError> {
+    ///         Ok(Started::Nothing)
+    ///     }
+    ///
+    ///     fn observe(&self, _: &RunContext<'_>, _: &StepSpec) -> Result<Observed, PluginError> {
+    ///         Ok(Observed::Running)
     ///     }
     /// }
     ///

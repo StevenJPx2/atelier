@@ -1,4 +1,4 @@
-//! `~/.local/state/atelier/state.json`: each project's issues and listing
+//! `~/.local/state/atelier/state.json`: each project's runs and listing
 //! tags. Written to a temporary file and renamed, so a stop never leaves it
 //! half written.
 
@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{Action, IssueKey, Mark, Phase, Reason, Record, Session, State};
+use atelier_core::rungs::{MAX_STEPS, Outcome, Progress, Status};
+use atelier_core::{Action, IssueKey, Mark, Phase, Reason, Record, Session, State, StepRecord};
 use color_eyre::eyre::{Result, WrapErr};
 use serde::{Deserialize, Serialize};
 
@@ -17,22 +18,41 @@ struct File {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct ProjectFile {
-    issues: Vec<IssueFile>,
+    #[serde(default)]
+    runs: Vec<RunFile>,
     etags: Vec<EtagFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct IssueFile {
+struct RunFile {
+    pipeline: String,
     tracker: String,
     id: String,
     phase: PhaseFile,
+    steps: Vec<StepFile>,
     title: String,
     branch: String,
     worktree: Option<PathBuf>,
-    session: Option<SessionFile>,
-    #[serde(default)]
     pull_request: Option<u64>,
     pending: Vec<ActionFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct StepFile {
+    id: String,
+    status: StatusFile,
+    failed: u8,
+    session: Option<SessionFile>,
+    why: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "name")]
+enum StatusFile {
+    Pending,
+    Running,
+    Settled { outcome: u8 },
+    Skipped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,13 +81,7 @@ enum MarkFile {
 enum PhaseFile {
     Untracked,
     Claiming,
-    Preparing,
-    Starting,
-    Building,
-    Open { rounds: u8 },
-    Stage { index: u8, rounds: u8 },
-    Green { rounds: u8 },
-    Ready { rounds: u8 },
+    Running,
     Done,
     Blocked { reason: ReasonFile },
     Stopped,
@@ -76,10 +90,10 @@ enum PhaseFile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "name")]
 enum ReasonFile {
-    Start,
-    RedRounds,
-    Stage { index: u8 },
-    Closed,
+    Claim,
+    Start { step: u8 },
+    Failed { step: u8 },
+    Changed,
     LostTrack,
 }
 
@@ -88,12 +102,10 @@ enum ReasonFile {
 enum ActionFile {
     Mark { mark: MarkFile },
     Unmark { mark: MarkFile },
-    CreateWorktree,
-    StartBuilder,
-    CommentSession,
-    StartStage { index: u8 },
+    Start { step: u8 },
+    Announce { step: u8 },
     Interrupt,
-    TellGreen,
+    Report,
     CloseIssue,
     RemoveWorktree,
     Comment { reason: ReasonFile },
@@ -147,32 +159,14 @@ pub fn write(path: &Path, projects: &BTreeMap<String, State>) -> Result<()> {
 
 impl From<ProjectFile> for State {
     fn from(file: ProjectFile) -> Self {
-        let issues = file.issues.into_iter().map(|issue| {
-            let key = IssueKey {
-                tracker: issue.tracker,
-                id: issue.id,
-            };
-            let record = Record {
-                phase: issue.phase.into(),
-                title: issue.title,
-                branch: issue.branch,
-                worktree: issue.worktree,
-                session: issue.session.map(|session| Session {
-                    id: session.id,
-                    title: session.title,
-                }),
-                pull_request: issue.pull_request,
-                pending: issue.pending.into_iter().map(Action::from).collect(),
-            };
-            (key, record)
-        });
+        let runs = file.runs.into_iter().map(RunFile::into_record);
         let etags = file
             .etags
             .into_iter()
             .map(|tag| ((tag.tracker, tag.mark.into()), tag.etag));
 
         Self {
-            issues: issues.collect(),
+            runs: runs.collect(),
             etags: etags.collect(),
         }
     }
@@ -180,25 +174,10 @@ impl From<ProjectFile> for State {
 
 impl From<&State> for ProjectFile {
     fn from(state: &State) -> Self {
-        let issues = state.issues.iter().map(|(key, record)| IssueFile {
-            tracker: key.tracker.clone(),
-            id: key.id.clone(),
-            phase: record.phase.into(),
-            title: record.title.clone(),
-            branch: record.branch.clone(),
-            worktree: record.worktree.clone(),
-            session: record.session.as_ref().map(|session| SessionFile {
-                id: session.id.clone(),
-                title: session.title.clone(),
-            }),
-            pull_request: record.pull_request,
-            pending: record
-                .pending
-                .iter()
-                .copied()
-                .map(ActionFile::from)
-                .collect(),
-        });
+        let runs = state
+            .runs
+            .iter()
+            .map(|(key, record)| RunFile::from_record(key, record));
         let etags = state.etags.iter().map(|((tracker, mark), etag)| EtagFile {
             tracker: tracker.clone(),
             mark: (*mark).into(),
@@ -206,8 +185,109 @@ impl From<&State> for ProjectFile {
         });
 
         Self {
-            issues: issues.collect(),
+            runs: runs.collect(),
             etags: etags.collect(),
+        }
+    }
+}
+
+impl RunFile {
+    fn into_record(self) -> (IssueKey, Record) {
+        let key = IssueKey {
+            tracker: self.tracker,
+            id: self.id,
+        };
+        let mut progress = Progress::default();
+        let positions = progress.status.iter_mut().zip(progress.failed.iter_mut());
+
+        for ((status, failed), step) in positions.zip(&self.steps) {
+            *status = step.status.into();
+            *failed = step.failed;
+        }
+
+        let steps = self
+            .steps
+            .into_iter()
+            .take(MAX_STEPS)
+            .map(|step| StepRecord {
+                id: step.id,
+                session: step.session.map(|session| Session {
+                    id: session.id,
+                    title: session.title,
+                }),
+                why: step.why,
+            });
+
+        let record = Record {
+            pipeline: self.pipeline,
+            phase: self.phase.into(),
+            progress,
+            steps: steps.collect(),
+            title: self.title,
+            branch: self.branch,
+            worktree: self.worktree,
+            pull_request: self.pull_request,
+            pending: self.pending.into_iter().map(Action::from).collect(),
+        };
+
+        (key, record)
+    }
+
+    fn from_record(key: &IssueKey, record: &Record) -> Self {
+        let progress = record.progress.status.iter().zip(record.progress.failed);
+        let steps = record
+            .steps
+            .iter()
+            .zip(progress)
+            .map(|(step, (status, failed))| StepFile {
+                id: step.id.clone(),
+                status: (*status).into(),
+                failed,
+                session: step.session.as_ref().map(|session| SessionFile {
+                    id: session.id.clone(),
+                    title: session.title.clone(),
+                }),
+                why: step.why.clone(),
+            });
+
+        Self {
+            pipeline: record.pipeline.clone(),
+            tracker: key.tracker.clone(),
+            id: key.id.clone(),
+            phase: record.phase.into(),
+            steps: steps.collect(),
+            title: record.title.clone(),
+            branch: record.branch.clone(),
+            worktree: record.worktree.clone(),
+            pull_request: record.pull_request,
+            pending: record
+                .pending
+                .iter()
+                .copied()
+                .map(ActionFile::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<StatusFile> for Status {
+    fn from(status: StatusFile) -> Self {
+        match status {
+            StatusFile::Pending => Self::Pending,
+            StatusFile::Running => Self::Running,
+            StatusFile::Settled { outcome } => Self::Settled(Outcome(outcome)),
+            StatusFile::Skipped => Self::Skipped,
+        }
+    }
+}
+
+impl From<Status> for StatusFile {
+    fn from(status: Status) -> Self {
+        match status {
+            Status::Pending => Self::Pending,
+            Status::Running => Self::Running,
+            Status::Settled(outcome) => Self::Settled { outcome: outcome.0 },
+            Status::Skipped => Self::Skipped,
         }
     }
 }
@@ -235,10 +315,10 @@ impl From<Mark> for MarkFile {
 impl From<ReasonFile> for Reason {
     fn from(reason: ReasonFile) -> Self {
         match reason {
-            ReasonFile::Start => Self::Start,
-            ReasonFile::RedRounds => Self::RedRounds,
-            ReasonFile::Stage { index } => Self::Stage(index),
-            ReasonFile::Closed => Self::Closed,
+            ReasonFile::Claim => Self::Claim,
+            ReasonFile::Start { step } => Self::Start(step),
+            ReasonFile::Failed { step } => Self::Failed(step),
+            ReasonFile::Changed => Self::Changed,
             ReasonFile::LostTrack => Self::LostTrack,
         }
     }
@@ -247,10 +327,10 @@ impl From<ReasonFile> for Reason {
 impl From<Reason> for ReasonFile {
     fn from(reason: Reason) -> Self {
         match reason {
-            Reason::Start => Self::Start,
-            Reason::RedRounds => Self::RedRounds,
-            Reason::Stage(index) => Self::Stage { index },
-            Reason::Closed => Self::Closed,
+            Reason::Claim => Self::Claim,
+            Reason::Start(step) => Self::Start { step },
+            Reason::Failed(step) => Self::Failed { step },
+            Reason::Changed => Self::Changed,
             Reason::LostTrack => Self::LostTrack,
         }
     }
@@ -261,13 +341,7 @@ impl From<PhaseFile> for Phase {
         match phase {
             PhaseFile::Untracked => Self::Untracked,
             PhaseFile::Claiming => Self::Claiming,
-            PhaseFile::Preparing => Self::Preparing,
-            PhaseFile::Starting => Self::Starting,
-            PhaseFile::Building => Self::Building,
-            PhaseFile::Open { rounds } => Self::Open { rounds },
-            PhaseFile::Stage { index, rounds } => Self::Stage { index, rounds },
-            PhaseFile::Green { rounds } => Self::Green { rounds },
-            PhaseFile::Ready { rounds } => Self::Ready { rounds },
+            PhaseFile::Running => Self::Running,
             PhaseFile::Done => Self::Done,
             PhaseFile::Blocked { reason } => Self::Blocked(reason.into()),
             PhaseFile::Stopped => Self::Stopped,
@@ -280,13 +354,7 @@ impl From<Phase> for PhaseFile {
         match phase {
             Phase::Untracked => Self::Untracked,
             Phase::Claiming => Self::Claiming,
-            Phase::Preparing => Self::Preparing,
-            Phase::Starting => Self::Starting,
-            Phase::Building => Self::Building,
-            Phase::Open { rounds } => Self::Open { rounds },
-            Phase::Stage { index, rounds } => Self::Stage { index, rounds },
-            Phase::Green { rounds } => Self::Green { rounds },
-            Phase::Ready { rounds } => Self::Ready { rounds },
+            Phase::Running => Self::Running,
             Phase::Done => Self::Done,
             Phase::Blocked(reason) => Self::Blocked {
                 reason: reason.into(),
@@ -301,12 +369,10 @@ impl From<ActionFile> for Action {
         match action {
             ActionFile::Mark { mark } => Self::Mark(mark.into()),
             ActionFile::Unmark { mark } => Self::Unmark(mark.into()),
-            ActionFile::CreateWorktree => Self::CreateWorktree,
-            ActionFile::StartBuilder => Self::StartBuilder,
-            ActionFile::CommentSession => Self::CommentSession,
-            ActionFile::StartStage { index } => Self::StartStage(index),
+            ActionFile::Start { step } => Self::Start(step),
+            ActionFile::Announce { step } => Self::Announce(step),
             ActionFile::Interrupt => Self::Interrupt,
-            ActionFile::TellGreen => Self::TellGreen,
+            ActionFile::Report => Self::Report,
             ActionFile::CloseIssue => Self::CloseIssue,
             ActionFile::RemoveWorktree => Self::RemoveWorktree,
             ActionFile::Comment { reason } => Self::Comment(reason.into()),
@@ -319,12 +385,10 @@ impl From<Action> for ActionFile {
         match action {
             Action::Mark(mark) => Self::Mark { mark: mark.into() },
             Action::Unmark(mark) => Self::Unmark { mark: mark.into() },
-            Action::CreateWorktree => Self::CreateWorktree,
-            Action::StartBuilder => Self::StartBuilder,
-            Action::CommentSession => Self::CommentSession,
-            Action::StartStage(index) => Self::StartStage { index },
+            Action::Start(step) => Self::Start { step },
+            Action::Announce(step) => Self::Announce { step },
             Action::Interrupt => Self::Interrupt,
-            Action::TellGreen => Self::TellGreen,
+            Action::Report => Self::Report,
             Action::CloseIssue => Self::CloseIssue,
             Action::RemoveWorktree => Self::RemoveWorktree,
             Action::Comment(reason) => Self::Comment {
@@ -334,35 +398,21 @@ impl From<Action> for ActionFile {
     }
 }
 
-/// The phase as `atelier status` shows it, such as `Blocked(RedRounds)`.
-pub fn shown(phase: Phase) -> String {
-    format!("{phase:?}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn every_phase_and_action_survives_the_file() {
+    fn every_phase_status_and_action_survives_the_file() {
         let phases = [
             Phase::Untracked,
             Phase::Claiming,
-            Phase::Preparing,
-            Phase::Starting,
-            Phase::Building,
-            Phase::Open { rounds: 2 },
-            Phase::Stage {
-                index: 1,
-                rounds: 3,
-            },
-            Phase::Green { rounds: 4 },
-            Phase::Ready { rounds: 1 },
+            Phase::Running,
             Phase::Done,
-            Phase::Blocked(Reason::Start),
-            Phase::Blocked(Reason::RedRounds),
-            Phase::Blocked(Reason::Stage(2)),
-            Phase::Blocked(Reason::Closed),
+            Phase::Blocked(Reason::Claim),
+            Phase::Blocked(Reason::Start(1)),
+            Phase::Blocked(Reason::Failed(2)),
+            Phase::Blocked(Reason::Changed),
             Phase::Blocked(Reason::LostTrack),
             Phase::Stopped,
         ];
@@ -370,16 +420,25 @@ mod tests {
             Action::Mark(Mark::Build),
             Action::Unmark(Mark::Working),
             Action::Mark(Mark::Blocked),
-            Action::CreateWorktree,
-            Action::StartBuilder,
-            Action::CommentSession,
-            Action::StartStage(1),
+            Action::Start(0),
+            Action::Announce(1),
             Action::Interrupt,
-            Action::TellGreen,
+            Action::Report,
             Action::CloseIssue,
             Action::RemoveWorktree,
-            Action::Comment(Reason::Stage(1)),
+            Action::Comment(Reason::Failed(2)),
         ];
+        let mut progress = Progress::default();
+        progress.status[0] = Status::Settled(Outcome(0));
+        progress.status[1] = Status::Running;
+        progress.status[2] = Status::Skipped;
+        progress.status[3] = Status::Settled(Outcome::FAILED);
+        progress.failed[3] = 2;
+        let steps = ["worktree", "builder", "checks", "ready"].map(|id| StepRecord {
+            id: id.into(),
+            session: None,
+            why: None,
+        });
         let mut state = State::default();
 
         for (number, phase) in phases.into_iter().enumerate() {
@@ -387,16 +446,19 @@ mod tests {
                 tracker: "github".into(),
                 id: number.to_string(),
             };
-            let mut record = Record::new(&key, "Fix the dead link");
+            let mut record = Record::new(&key, "Fix the dead link", "build");
             record.phase = phase;
-            record.pending.clone_from(&pending);
-            record.worktree = Some(PathBuf::from("/w"));
-            record.session = Some(Session {
+            record.progress = progress;
+            record.steps = steps.to_vec();
+            record.steps[1].session = Some(Session {
                 id: "ses_1".into(),
                 title: "#1".into(),
             });
+            record.steps[3].why = Some("CI failed on 2 commits".into());
+            record.pending.clone_from(&pending);
+            record.worktree = Some(PathBuf::from("/w"));
             record.pull_request = Some(8);
-            state.issues.insert(key, record);
+            state.runs.insert(key, record);
         }
         state
             .etags

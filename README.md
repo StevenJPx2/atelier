@@ -128,20 +128,22 @@ The gates follow the code-discipline policy, one check each:
 
 Every step between a commit and a ready pull request comes from a plugin, and each
 project picks the ones it wants: fixes run in a commit hook, checks run in CI, and
-stages run in order once every check passes. Language plugins are found; other
-checks and every stage are named in the config. Chauffeur has a docs site, so it
-adds the `docs` check, which builds the site and fails on a dead link or a diagram
-that does not render; atelier, with no site, leaves it out:
+the steps of a pipeline run once their needs hold. Language plugins are found;
+other checks are named in the config. Chauffeur has a docs site, so it adds the
+`docs` check, which builds the site and fails on a dead link or a diagram that
+does not render; atelier, with no site, leaves it out:
 
 ```toml
 # Chauffeur's .atelier/config.toml
 base = "v2"
 checks = ["docs"]
-stages = ["critic", "recording"]
 ```
 
-A new step is a new plugin and a line in the projects that want it; core runs
-stages by position and limit, and knows none by name.
+The loop from an issue to a merged pull request is the built-in `build`
+pipeline: worktree, builder, checks, ready, merge. A project that writes
+`[pipeline.build]` replaces it, with its own steps and rounds; a new step is a
+kind a plugin offers, and core runs every step by its needs, knowing none by
+name. `atelier status` shows each pipeline with the plugin behind each step.
 
 ## An issue's states
 
@@ -195,9 +197,6 @@ base = "v2"
 [filter]
 labels = ["backend"] # atelier:build issues also labelled backend
 
-[limits]
-red_rounds = 5      # failed CI rounds before the builder stops, the default
-
 [paths."vendor"]
 checks = []         # nothing under vendor/ is checked
 ```
@@ -220,10 +219,11 @@ Every pull request has the same sections, and a check fails when one is empty:
 
 ## Limits
 
-Each loop ends. After `red_rounds` failed CI rounds or `critic_rounds` reviews,
-the builder comments on the pull request with what blocks it, labels the issue
-`atelier:blocked` and stops. The daemon checks the same counts and stops a
-builder that does not.
+Each loop ends. Each step has its `rounds`, five for the built-in `checks`: a
+step's last failed round blocks the run unless a later step waits for that
+failure, and atelier interrupts the builder, labels the issue `atelier:blocked`
+and says why. A builder that only a person can unblock comments on the pull
+request, labels the issue blocked and stops.
 
 ## Building atelier
 

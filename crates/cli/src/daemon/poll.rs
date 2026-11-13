@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use atelier_core::{Failure, PluginError, Report, State, act, observe};
+use atelier_core::{Failure, PluginError, Project, Report, State, act, observe};
 use color_eyre::eyre::Result;
 
 use super::writer::Writer;
@@ -80,21 +80,31 @@ fn once(
     let resolved = config::resolve(entry, &local)?;
     let instances = Build::new(paths);
     let built = instances.plugins(&resolved)?;
-    instances.pipelines(&resolved, &local.tree(&resolved.project.base)?)?;
     let plugins = built.plugins(instances.git());
+    let project = Project {
+        pipelines: instances.pipelines(&resolved, &local.tree(&resolved.project.base)?)?,
+        steps: paths.steps().join(&entry.repo),
+        ..resolved.project
+    };
 
-    let observation = observe(&resolved.project, &plugins, state)?;
+    let observation = observe(&project, &plugins, state)?;
     let mut save = |state: &State| writer.save(&entry.repo, state);
-    let report = act(&observation, state, &resolved.project, &plugins, &mut save)?;
+    let report = act(&observation, state, &project, &plugins, &mut save)?;
 
     Ok((report, resolved.poll))
 }
 
 fn tell(repo: &str, report: &Report) {
-    for step in &report.moves {
+    for moved in &report.moves {
+        let phases = if moved.from == moved.to {
+            format!("{:?}", moved.to)
+        } else {
+            format!("{:?} → {:?}", moved.from, moved.to)
+        };
+
         log(
             repo,
-            &format!("{} {:?} → {:?}", step.key, step.from, step.to),
+            &format!("{} {} {phases}: {}", moved.pipeline, moved.key, moved.what),
         );
     }
 

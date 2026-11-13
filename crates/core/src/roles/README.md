@@ -6,7 +6,7 @@ plugin's `register` adds the roles it fills to the `Registry`.
 | File        | Holds                                                                 |
 | ----------- | --------------------------------------------------------------------- |
 | `traits.rs` | `Tracker`, `Forge`, `Agent` and `Worktrees`                           |
-| `step.rs`   | `Step`, a plugin's kinds of step, each a `Kind` with its `Outcomes`   |
+| `step.rs`   | `Step`: kinds, starting and observing a step, with its `RunContext`   |
 | `issue.rs`  | `Repo`, `IssueKey`, `Issue`, `Filter`, `Listing` and `Session`        |
 | `error.rs`  | `PluginError` and its `Failure`: transient, rate-limited or permanent |
 

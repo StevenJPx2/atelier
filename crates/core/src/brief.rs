@@ -1,6 +1,6 @@
 //! The builder's brief: everything it is told when it starts.
 
-use crate::{Issue, Limits};
+use crate::Issue;
 
 const CONTRACT: &str = include_str!("../prompts/builder.md");
 
@@ -20,7 +20,7 @@ impl Brief {
     /// The contract, filled in for one issue.
     ///
     /// ```
-    /// use atelier_core::{Brief, Issue, IssueKey, Marks, Limits};
+    /// use atelier_core::{Brief, Issue, IssueKey, Marks};
     ///
     /// let issue = Issue {
     ///     key: IssueKey { tracker: "github".into(), id: "12".into() },
@@ -28,31 +28,38 @@ impl Brief {
     ///     open: true,
     ///     marks: Marks::default(),
     /// };
-    /// let limits = Limits::new(5, [])?;
     ///
-    /// let brief = Brief::new("#12", &issue, "issue-12-fix-the-dead-link", "v2", &limits)
+    /// let brief = Brief::new("#12", &issue, "issue-12-fix-the-dead-link", "v2")
     ///     .with("Open the pull request with gh pr create --draft.".into())
     ///     .deny(["gh pr merge *".into()]);
     ///
     /// assert_eq!(brief.title, "#12 Fix the dead link");
-    /// assert!(brief.text().contains("After 5 failed rounds"));
+    /// assert!(brief.text().contains("into `v2`"));
     /// assert!(brief.denied.contains(&"git tag *".to_owned()));
-    /// # Ok::<(), atelier_core::LimitsError>(())
     /// ```
     #[must_use]
-    pub fn new(reference: &str, issue: &Issue, branch: &str, base: &str, limits: &Limits) -> Self {
+    pub fn new(reference: &str, issue: &Issue, branch: &str, base: &str) -> Self {
         let contract = CONTRACT
             .replace("$reference", reference)
             .replace("$title", &issue.title)
             .replace("$branch", branch)
-            .replace("$base", base)
-            .replace("$red_rounds", &limits.red_rounds().to_string());
+            .replace("$base", base);
 
         Self {
             title: format!("{reference} {}", issue.title),
             branch: branch.to_owned(),
             parts: vec![contract],
             denied: DENIED.iter().map(|&pattern| pattern.to_owned()).collect(),
+        }
+    }
+
+    /// The brief of an agent's step with its own prompt: the prompt in
+    /// place of every part, with the same title, branch and denials.
+    #[must_use]
+    pub fn prompted(&self, prompt: &str) -> Self {
+        Self {
+            parts: vec![prompt.to_owned()],
+            ..self.clone()
         }
     }
 

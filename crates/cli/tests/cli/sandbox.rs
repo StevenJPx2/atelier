@@ -270,17 +270,36 @@ impl Sandbox {
         fs::read_to_string(path).map_or(Value::Null, |text| serde_json::from_str(&text).unwrap())
     }
 
-    /// The issue's phase in `state.json`, such as `building`, once its
-    /// step's actions are all done.
-    pub fn phase(&self, id: &str) -> Option<String> {
+    /// Issue `id`'s run in `state.json`, once its move's actions are all
+    /// done.
+    fn run(&self, id: &str) -> Option<Value> {
         let state = self.state();
-        let issues = state["projects"][REPO]["issues"].as_array()?;
-        let issue = issues.iter().find(|issue| issue["id"] == id)?;
-        let settled = issue["pending"].as_array().is_some_and(Vec::is_empty);
+        let runs = state["projects"][REPO]["runs"].as_array()?;
+        let run = runs.iter().find(|run| run["id"] == id)?;
+        let settled = run["pending"].as_array().is_some_and(Vec::is_empty);
 
-        settled
-            .then(|| issue["phase"]["name"].as_str().map(str::to_owned))
-            .flatten()
+        settled.then(|| run.clone())
+    }
+
+    /// The run's phase, such as `running`, once its move's actions are all
+    /// done.
+    pub fn phase(&self, id: &str) -> Option<String> {
+        self.run(id)?["phase"]["name"].as_str().map(str::to_owned)
+    }
+
+    /// The status of the run's step called `step`, such as `running`, once
+    /// its move's actions are all done.
+    pub fn step(&self, id: &str, step: &str) -> Option<String> {
+        let run = self.run(id)?;
+        let steps = run["steps"].as_array()?;
+        let found = steps.iter().find(|found| found["id"] == step)?;
+
+        found["status"]["name"].as_str().map(str::to_owned)
+    }
+
+    /// Issue 12's builder is running.
+    pub fn building(&self) -> bool {
+        self.step("12", "builder").as_deref() == Some("running")
     }
 
     /// Opens a draft pull request numbered `number` on `branch`, its checks'

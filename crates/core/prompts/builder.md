@@ -10,9 +10,9 @@ on branch `$branch`, and push only to it.
   messages, and atelier tells you when every check passes.
 - On a failed check or a finding: read it, fix the cause, push. Never push
   again only to retry.
-- After $red_rounds failed rounds, or when only a person can unblock you:
-  comment on the pull request with what blocks it, mark the issue blocked, and
-  stop.
+- When only a person can unblock you: comment on the pull request with what
+  blocks it, mark the issue blocked, and stop. atelier stops you itself once
+  CI fails its last round.
 - When atelier tells you every check passed: mark the pull request ready, comment on the issue,
   and keep answering reviews until the merge.
 - When atelier tells you it stopped you: take no further action, and end any

@@ -42,9 +42,7 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
 
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
     let before = listings(&sandbox);
     sandbox.wait("a second poll", |sandbox| listings(sandbox) >= before + 2);
     drop(daemon);
@@ -81,11 +79,11 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
         "{first}"
     );
     assert!(
-        log.contains(" StevenJPx2/demo github#12 Untracked → Claiming"),
+        log.contains(" StevenJPx2/demo build github#12 Untracked → Claiming: requested"),
         "{log}"
     );
     assert!(
-        log.contains(" StevenJPx2/demo github#12 Starting → Building"),
+        log.contains(" StevenJPx2/demo build github#12 Running: worktree settled passed"),
         "{log}"
     );
 
@@ -95,7 +93,13 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
         status.contains("base        main                     found"),
         "{status}"
     );
-    assert!(status.contains("github#12   Building"), "{status}");
+    assert!(status.contains("github#12   build Running"), "{status}");
+    assert!(
+        status.contains(
+            "    worktree passed, builder running, checks pending, ready pending, merge pending"
+        ),
+        "{status}"
+    );
     assert!(
         status
             .lines()
@@ -108,9 +112,7 @@ fn a_labelled_issue_gets_one_builder_across_polls_and_a_restart() {
 fn passing_checks_wake_the_builder_to_mark_its_pull_request_ready() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
 
     sandbox.open_pull_request("issue-12-fix-the-dead-link", 8, "SUCCESS");
     sandbox.wait("the builder told", |sandbox| prompts(sandbox).len() >= 2);
@@ -119,7 +121,7 @@ fn passing_checks_wake_the_builder_to_mark_its_pull_request_ready() {
     drop(daemon);
 
     let prompts = prompts(&sandbox);
-    assert_eq!(sandbox.phase("12").as_deref(), Some("green"));
+    assert_eq!(sandbox.step("12", "ready").as_deref(), Some("running"));
     assert_eq!(prompts.len(), 2, "{prompts:?}");
     assert!(
         prompts[1].starts_with("api post /api/session/ses_e34e74974ffezeihakyxaDRnbK/prompt "),
@@ -132,9 +134,7 @@ fn passing_checks_wake_the_builder_to_mark_its_pull_request_ready() {
 fn removing_the_working_label_interrupts_the_builder_and_tells_it_to_stand_down() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
 
     sandbox.set_labels("12", &[]);
     sandbox.wait("the builder stopped", |sandbox| {
@@ -156,13 +156,11 @@ fn removing_the_working_label_interrupts_the_builder_and_tells_it_to_stand_down(
 fn status_shows_the_pull_request_a_builder_opened() {
     let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
 
     sandbox.open_pull_request("issue-12-fix-the-dead-link", 8, "PENDING");
     sandbox.wait("the pull request", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("open")
+        sandbox.step("12", "checks").as_deref() == Some("running")
     });
     drop(daemon);
 
@@ -172,8 +170,12 @@ fn status_shows_the_pull_request_a_builder_opened() {
         .lines()
         .find(|line| line.contains("github#12"))
         .unwrap_or_default();
-    assert!(line.contains("Open { rounds: 0 }"), "{status}");
+    assert!(line.contains("build Running"), "{status}");
     assert!(line.ends_with("  #8"), "{status}");
+    assert!(
+        status.contains("worktree passed, builder opened, checks running, ready pending"),
+        "{status}"
+    );
     assert_eq!(sandbox.gh_calls().len(), before, "status asked GitHub");
 }
 
@@ -344,9 +346,7 @@ fn the_daemon_works_from_its_own_clone_and_never_from_your_checkout() {
     let before = git(&sandbox.checkout, &["for-each-ref", "--format=%(refname)"]);
 
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
     drop(daemon);
 
     let worktree = sandbox
@@ -375,14 +375,13 @@ fn the_daemon_works_from_its_own_clone_and_never_from_your_checkout() {
 #[test]
 fn the_default_branch_names_the_base_and_the_base_holds_the_rest() {
     let sandbox = Sandbox::new(&labelled(&[]));
-    sandbox.config("base = \"v2\"\n[limits]\nred_rounds = 9\n");
-    sandbox.config_on("v2", "poll = 20\n[limits]\nred_rounds = 3\n");
+    sandbox.config("base = \"v2\"\npoll = 40\n");
+    sandbox.config_on("v2", "poll = 20\n");
 
     let status = sandbox.status();
 
     for line in [
         "base        v2                       set",
-        "red_rounds  3                        set",
         "poll        20 s                     set",
         "forge       github                   found",
     ] {
@@ -393,7 +392,7 @@ fn the_default_branch_names_the_base_and_the_base_holds_the_rest() {
 #[test]
 fn a_base_that_is_the_default_branch_reads_the_rest_there() {
     let sandbox = Sandbox::new(&labelled(&[]));
-    sandbox.config("base = \"main\"\npoll = 15\n[limits]\nred_rounds = 2\n");
+    sandbox.config("base = \"main\"\npoll = 15\nchecks = [\"commands\"]\n");
 
     let status = sandbox.status();
 
@@ -402,7 +401,7 @@ fn a_base_that_is_the_default_branch_reads_the_rest_there() {
         "{status}"
     );
     assert!(
-        status.contains("red_rounds  2                        set"),
+        status.contains("checks      commands                 set"),
         "{status}"
     );
     assert!(
@@ -433,11 +432,11 @@ fn settings_atelier_cannot_run_are_refused_by_name() {
         ),
         (
             "stages = [\"critic\"]\n",
-            "this atelier has no stage plugin \"critic\"; it has none",
+            "stages is unknown; a stage is a step of [pipeline.build]",
         ),
         (
-            "[limits]\ncritic_rounds = 2\n",
-            "limits.critic_rounds is unknown; it takes red_rounds",
+            "[limits]\nred_rounds = 2\n",
+            "limits is unknown; set rounds on a step of [pipeline.build], such as checks",
         ),
     ];
 

@@ -2,8 +2,8 @@
 //! check refuses one.
 
 use atelier_core::{
-    Kind, Kinds, MemoryTree, Need, Outcomes, Pipeline, Registry, Setting, Settings, SettingsError,
-    Step, Tree,
+    Kind, Kinds, MemoryTree, Need, Observed, Outcomes, Pipeline, PluginError, Registry, RunContext,
+    Setting, Settings, SettingsError, Started, Step, StepSpec, Tree,
 };
 
 /// Kinds as the build's plugins offer them, with an `opencode` whose
@@ -56,6 +56,14 @@ impl Step for Offers {
                 Ok(settings.clone())
             }
         }
+    }
+
+    fn start(&self, _: &RunContext<'_>, _: &StepSpec) -> Result<Started, PluginError> {
+        Ok(Started::Nothing)
+    }
+
+    fn observe(&self, _: &RunContext<'_>, _: &StepSpec) -> Result<Observed, PluginError> {
+        Ok(Observed::Running)
     }
 }
 

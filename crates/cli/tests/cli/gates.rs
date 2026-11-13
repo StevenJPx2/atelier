@@ -225,9 +225,7 @@ fn a_builders_commit_is_fixed_by_its_hook_and_the_projects_hook_still_runs() {
     git(checkout, &["push", "--quiet", "origin", "main"]);
 
     let daemon = sandbox.daemon();
-    sandbox.wait("a builder", |sandbox| {
-        sandbox.phase("12").as_deref() == Some("building")
-    });
+    sandbox.wait("a builder", Sandbox::building);
     drop(daemon);
 
     let worktree = sandbox

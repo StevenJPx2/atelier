@@ -1,8 +1,7 @@
-//! The issue machine: one pure `step` from a phase and an event to the next
-//! phase and the actions that carry it out.
+//! The run machine: one pure `step` from a run and an event to the next
+//! run and the actions that carry it out, over rungs' step logic.
 
 mod action;
-mod limits;
 mod phase;
 mod step;
 
@@ -10,6 +9,5 @@ mod step;
 mod proofs;
 
 pub use action::{Action, Mark};
-pub use limits::{Limits, LimitsError};
-pub use phase::{Event, Phase, Reason};
+pub use phase::{Event, Phase, Reason, Run};
 pub use step::step;

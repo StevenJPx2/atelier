@@ -13,9 +13,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use atelier_core::{
-    Agent, Brief, Failure, Issue, IssueKey, Limits, Marks, Plugin, Registry, Session,
-};
+use atelier_core::{Agent, Brief, Failure, Issue, IssueKey, Marks, Plugin, Registry, Session};
 use atelier_opencode::{OpenCode, rules};
 
 mod live;
@@ -125,15 +123,9 @@ fn brief() -> Brief {
         marks: Marks::default(),
     };
 
-    Brief::new(
-        "#12",
-        &issue,
-        "issue-12-fix-the-dead-link",
-        "v2",
-        &Limits::new(5, []).unwrap(),
-    )
-    .with("Open a draft pull request.".into())
-    .deny(["gh pr merge *".into()])
+    Brief::new("#12", &issue, "issue-12-fix-the-dead-link", "v2")
+        .with("Open a draft pull request.".into())
+        .deny(["gh pr merge *".into()])
 }
 
 /// The JSON body a call sent with `--data`.

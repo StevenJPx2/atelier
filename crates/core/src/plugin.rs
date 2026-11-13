@@ -144,6 +144,12 @@ impl<'a> Registry<'a> {
         self.steps.push((self.naming, step));
     }
 
+    /// Each plugin's kinds of step, by the plugin's name.
+    #[must_use]
+    pub fn steps(&self) -> Vec<(&'static str, &'a dyn Step)> {
+        self.steps.clone()
+    }
+
     /// The kinds of step a project can use: each plugin's under its own
     /// name, and those of the project's agent, forge and only tracker under
     /// `agent`, `forge` and `tracker`, so a committed config works with any

@@ -82,8 +82,11 @@ fn stop_queues_a_request_and_interrupts_a_running_builder() {
         "{}",
         String::from_utf8_lossy(&stopped.stderr)
     );
-    sandbox.wait("stopped", |sandbox| {
+    // The state is saved before the poll writes its report to the log.
+    // Keep the daemon alive until both observations have arrived.
+    sandbox.wait("stopped and reported", |sandbox| {
         sandbox.phase("12").as_deref() == Some("stopped")
+            && sandbox.log().contains("Running → Stopped: stop requested")
     });
     drop(daemon);
 

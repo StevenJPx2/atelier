@@ -31,4 +31,7 @@ run::observe(&folder, &step.settings)?;
 - **Outcomes.** `passed` on exit 0; `failed` on any other exit, past its
   limit, or when it stopped without an exit status, each with why and the
   last 20 lines it printed.
+- **Cleanup.** Every run exit cancels a command still running in its step's
+  folder. A completed command needs no signal. Each pass uses its own
+  generation folder, so a fresh pass cannot signal an older command's group.
 - **`ATELIER_BASE`** is `origin/<base>`, as for the gates.

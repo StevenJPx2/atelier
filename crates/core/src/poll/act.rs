@@ -322,6 +322,7 @@ impl Places {
             .steps
             .join(&name)
             .join(&record.pipeline)
+            .join(record.generation.to_string())
             .join(&spec.id);
 
         Self { name, folder }
@@ -506,6 +507,8 @@ fn perform(
                 plugins.agent.interrupt(session)?;
                 plugins.agent.tell(session, &why)?;
             }
+
+            cleanup(record, &issue.key, context)?;
         }
         Action::RemoveWorktree => {
             if let Some(worktree) = record.worktree.clone() {
@@ -516,6 +519,39 @@ fn perform(
     }
 
     Ok(None)
+}
+
+/// Releases each started step's resources, even when its pipeline was
+/// removed: the record keeps which plugin started it.
+fn cleanup(record: &Record, key: &IssueKey, context: &Context<'_, '_>) -> Result<(), PluginError> {
+    let root = context
+        .project
+        .steps
+        .join(Record::folder(key))
+        .join(&record.pipeline)
+        .join(record.generation.to_string());
+
+    for (index, kept) in record.steps.iter().enumerate() {
+        if record.progress.status.get(index) == Some(&Status::Pending) {
+            continue;
+        }
+
+        let plugin = if kept.plugin.is_empty() {
+            context
+                .project
+                .pipeline(&record.pipeline)
+                .and_then(|pipeline| pipeline.steps().get(index))
+                .map(|spec| spec.plugin)
+        } else {
+            Some(kept.plugin.as_str())
+        };
+
+        if let Some(plugin) = plugin {
+            context.plugins.step(plugin)?.stop(&root.join(&kept.id))?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Starts step `index` through its plugin, and keeps what the start made.

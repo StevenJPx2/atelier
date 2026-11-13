@@ -160,7 +160,7 @@ fn a_written_build_runs_its_command_in_the_worktree_and_closes_the_issue_with_ea
     let report = issue["comments"][0].as_str().unwrap_or_default();
     let output = sandbox
         .home
-        .join(".local/state/atelier/steps/StevenJPx2/demo/issue-12/build/deps/output");
+        .join(".local/state/atelier/steps/StevenJPx2/demo/issue-12/build/1/deps/output");
     assert_eq!(issue["state"], "closed", "{issue}");
     assert!(report.starts_with("atelier finished `build`:"), "{report}");
     assert!(

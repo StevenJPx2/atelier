@@ -47,6 +47,9 @@ let report = act(&observation, &mut state, &project, &plugins, &mut |state| stor
   leaves it once done; a start that made a session leaves its announcement
   in its place. A stop between two actions resumes at the next one; a stop
   right after an action, before its save, repeats it.
+- **Cleanup.** Every exit interrupts resident sessions and asks each step's
+  plugin to release its own resources, including live command groups. The
+  plugin name is kept in the step record even if its pipeline is removed.
 - **Failures.** A permanent failure while claiming or starting a step
   blocks the run; any other failure leaves the action pending and is
   reported. The listings' tags are kept only when every item succeeded, so

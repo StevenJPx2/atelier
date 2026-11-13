@@ -246,6 +246,10 @@ pub trait Step {
     fn start(&self, run: &RunContext<'_>, step: &StepSpec)
         -> Result<Started, PluginError>;
 
+    /// Releases resources kept in the step's folder on every run exit;
+    /// safe when no start made anything, or cleanup already ran.
+    fn stop(&self, folder: &Path) -> Result<(), PluginError>;
+
     /// What a poll sees: running, settled, a failed round, or, for a
     /// settled step, that it runs again.
     fn observe(&self, run: &RunContext<'_>, step: &StepSpec)
@@ -482,7 +486,10 @@ stateDiagram-v2
 - A push resets each started restart step, and every step that depends on it, to
   Pending; failed rounds are kept, so CI rounds still add up across pushes.
 - Stopping, blocking and Done each remove the working mark, interrupt every
-  resident step that started, and remove the worktree.
+  resident step that started, cancel background commands, and remove the
+  worktree. Each step's plugin cleans up its own folder; the record keeps
+  which plugin started it even if its pipeline is removed. Each pass has a
+  separate folder under `steps/<item>/<pipeline>/<generation>/<step>`.
 
 rungs proves its own promises
 ([rungs#1](https://github.com/StevenJPx2/rungs/issues/1)), for every plan of up
@@ -655,6 +662,7 @@ pub struct Record {
 
 pub struct StepRecord {
     pub id: String,
+    pub plugin: String,
     pub session: Option<Session>,
     pub why: Option<String>,
 }

@@ -129,6 +129,37 @@ pub fn observe(folder: &Path, settings: &Settings) -> Result<Option<Outcome>, Pl
     Ok(None)
 }
 
+/// Cancels a command still running in this attempt's folder. A command
+/// that already exited, or an attempt never started, needs no signal.
+///
+/// # Errors
+///
+/// Its group file cannot be read, or does not name a process group.
+pub fn stop(folder: &Path) -> Result<(), PluginError> {
+    if folder.join("exit").exists() {
+        return Ok(());
+    }
+
+    let text = match fs::read_to_string(folder.join("group")) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(PluginError::transient(format!(
+                "reading command group: {error}"
+            )));
+        }
+    };
+    let group = text
+        .trim()
+        .parse::<u32>()
+        .ok()
+        .filter(|group| *group > 1)
+        .ok_or_else(|| PluginError::permanent("the command's group is invalid"))?;
+
+    kill(u64::from(group));
+    Ok(())
+}
+
 /// The outcome its exit status gives, once it has one.
 fn ended(folder: &Path) -> Option<Outcome> {
     let status = fs::read_to_string(folder.join("exit")).ok()?;
@@ -329,6 +360,38 @@ mod tests {
         assert_eq!(outcome.why, "it ran past its 1-second limit:\nwaiting");
         thread::sleep(Duration::from_millis(200));
         assert!(!alive(group));
+    }
+
+    #[test]
+    fn stopping_a_command_kills_its_group_and_is_safe_to_repeat() {
+        let scratch = Scratch::new("cleanup");
+        scratch.start("sleep 30 & wait", None);
+        let group = scratch.group();
+
+        stop(&scratch.folder()).unwrap();
+        let begun = Instant::now();
+        while alive(group) && begun.elapsed() < Duration::from_secs(3) {
+            thread::sleep(Duration::from_millis(20));
+        }
+        stop(&scratch.folder()).unwrap();
+
+        assert!(!alive(group));
+        assert!(stop(&scratch.0.join("never-started")).is_ok());
+    }
+
+    #[test]
+    fn cleanup_refuses_an_invalid_or_unreadable_group() {
+        let scratch = Scratch::new("bad-group");
+        fs::create_dir_all(scratch.folder()).unwrap();
+        fs::write(scratch.folder().join("group"), "0").unwrap();
+
+        let invalid = stop(&scratch.folder()).unwrap_err();
+        fs::remove_file(scratch.folder().join("group")).unwrap();
+        fs::create_dir(scratch.folder().join("group")).unwrap();
+        let unreadable = stop(&scratch.folder()).unwrap_err();
+
+        assert!(invalid.is_permanent());
+        assert!(!unreadable.is_permanent());
     }
 
     #[test]

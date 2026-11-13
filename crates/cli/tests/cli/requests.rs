@@ -191,3 +191,54 @@ fn finish_outside_a_run_and_stop_with_no_matching_run_are_refused() {
     assert!(!stop.status.success());
     assert!(String::from_utf8_lossy(&stop.stderr).contains("no working run has that key"));
 }
+#[test]
+fn stopping_a_run_cancels_its_background_command_group() {
+    let sandbox = Sandbox::new(&labelled(&["atelier:build"]));
+    sandbox.config(
+        r#"
+poll = 15
+[[pipeline.build.step]]
+id = "worktree"
+uses = "git.worktree"
+
+[[pipeline.build.step]]
+id = "wait"
+uses = "atelier.command"
+run = "sleep 300 & wait"
+"#,
+    );
+    let daemon = sandbox.daemon();
+    sandbox.wait("command running", |sandbox| {
+        sandbox.step("12", "wait").as_deref() == Some("running")
+    });
+    let group = sandbox
+        .home
+        .join(".local/state/atelier/steps/StevenJPx2/demo/issue-12/build/1/wait/group");
+    let group = fs::read_to_string(group).unwrap();
+    let stopped = sandbox.atelier(&["stop", "build github#12"]);
+    assert!(
+        stopped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stopped.stderr)
+    );
+    sandbox.wait("stopped", |sandbox| {
+        sandbox.phase("12").as_deref() == Some("stopped")
+    });
+    drop(daemon);
+
+    let alive = std::process::Command::new("kill")
+        .args(["-0", "--", &format!("-{}", group.trim())])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success();
+    if alive {
+        std::process::Command::new("kill")
+            .args(["-KILL", "--", &format!("-{}", group.trim())])
+            .status()
+            .unwrap();
+    }
+
+    assert!(!alive, "the command process group survived stop");
+    assert!(!worktree(&sandbox).exists());
+}

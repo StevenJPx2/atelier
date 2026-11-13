@@ -303,6 +303,7 @@ mod tests {
         record.steps = ["worktree", "checks", "lint", "merge", "late"]
             .map(|id| StepRecord {
                 id: id.into(),
+                plugin: String::new(),
                 session: None,
                 why: None,
             })

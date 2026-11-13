@@ -39,6 +39,8 @@ pub struct Record {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepRecord {
     pub id: String,
+    /// The plugin that started it, kept even if its pipeline is removed.
+    pub plugin: String,
     pub session: Option<Session>,
     pub why: Option<String>,
 }
@@ -107,6 +109,7 @@ impl Record {
             .iter()
             .map(|step| StepRecord {
                 id: step.id.clone(),
+                plugin: step.plugin.to_owned(),
                 session: last
                     .iter()
                     .find(|kept| kept.id == step.id)

@@ -2,6 +2,7 @@
 //! plugin registry.
 
 mod checks;
+mod pipeline;
 mod poll;
 mod registry;
 mod world;

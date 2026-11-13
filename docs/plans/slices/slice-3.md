@@ -96,6 +96,120 @@ Every step has the same shape:
   steps each refuse the pipeline with its name and the reason:
   `security-audit: no step kind "forge.reviews"; github has checks, ready, merge`.
 
+#### Structure
+
+`Pipeline::read` reads one pipeline from its steps' settings, each a
+`[[pipeline.<name>.step]]` table, and checks it against the kinds the project
+can use. A step with neither `after` nor `after_any` waits for the step before
+it to pass; `after = []` waits for nothing. Each step's other keys go to its
+kind's plugin, which checks them and returns them as the step runs with them.
+A pipeline's name, each id and each outcome take letters, digits, `-` and `_`;
+`rounds` is 1 to 255.
+
+```rust
+pub const MAX_STEPS: usize = 8;
+pub const PASSED: &str = "passed";
+pub const FAILED: &str = "failed";
+
+pub struct Pipeline {
+    name: String,
+    steps: Vec<StepSpec>,
+}
+
+impl Pipeline {
+    pub fn read(
+        name: &str,
+        steps: &[Settings],
+        kinds: &Kinds<'_>,
+        tree: &dyn Tree,
+    ) -> Result<Self, PipelineError>;
+    pub fn name(&self) -> &str;
+    pub fn steps(&self) -> &[StepSpec];
+    pub fn step(&self, id: &str) -> Option<&StepSpec>;
+}
+
+pub struct PipelineError {
+    pub pipeline: String,
+    pub problem: String,
+}
+```
+
+A checked step keeps the kind as written and the plugin it resolved to, so
+`atelier status` shows `forge.checks` as `github.checks`.
+
+```rust
+pub struct StepSpec {
+    pub id: String,
+    pub uses: String,
+    pub plugin: &'static str,
+    pub kind: String,
+    pub needs: Needs,
+    pub outcomes: Vec<String>,
+    pub rounds: u8,
+    pub restart: bool,
+    pub resident: bool,
+    pub settings: Settings,
+}
+
+impl StepSpec {
+    pub fn resolved(&self) -> String;
+}
+
+pub struct Needs {
+    pub all: Vec<Need>,
+    pub any: Vec<Need>,
+}
+
+pub struct Need {
+    pub step: String,
+    pub outcomes: Vec<String>,
+}
+```
+
+`Kinds` holds each namespace and the plugin behind it. The registry puts each
+plugin's kinds under its own name, and the project's agent, forge and only
+tracker under `agent`, `forge` and `tracker`; with no agent named, the
+build's only agent fills the role.
+
+```rust
+pub struct Kinds<'a> {
+    namespaces: Vec<Namespace<'a>>,
+}
+
+impl<'a> Kinds<'a> {
+    pub fn with(
+        self,
+        namespace: &str,
+        plugin: &'static str,
+        step: &'a dyn Step,
+    ) -> Self;
+}
+
+impl<'a> Registry<'a> {
+    pub fn step(&mut self, step: &'a dyn Step);
+    pub fn kinds(
+        &self,
+        agent: Option<&str>,
+        forge: &str,
+        trackers: &[&str],
+    ) -> Kinds<'a>;
+}
+```
+
+A step's settings are read with `Settings`' typed getters, which name the key
+of any value of the wrong type, such as `checks.rounds: must be a number`.
+
+```rust
+impl Settings {
+    pub fn get(&self, key: &str) -> Option<&Setting>;
+    pub fn number(&self, path: &str, key: &str)
+        -> Result<Option<i64>, SettingsError>;
+    pub fn flag(&self, path: &str, key: &str)
+        -> Result<Option<bool>, SettingsError>;
+    pub fn without(&self, keys: &[&str]) -> Self;
+}
+```
+
 ### Step kinds
 
 | Kind              | From                        | Starts by                                                                                                                                                  | Settles                                                                   |
@@ -112,16 +226,26 @@ A plugin adds kinds through the new `Step` role:
 ```rust
 pub trait Step {
     /// The kinds this plugin offers, such as "checks" for "github.checks".
-    fn kinds(&self) -> Vec<KindInfo>; // name, outcomes, resident
+    fn kinds(&self) -> Vec<Kind>; // name, outcomes, resident
 
-    /// Checks the step's own settings when the config loads.
-    fn configure(&self, kind: &str, settings: &Table) -> Result<Configured, PluginError>;
+    /// Checks the step's own settings when the config loads; `tree` is the
+    /// project at origin/<base>, where `prompt` names a file.
+    fn configure(
+        &self,
+        kind: &str,
+        settings: &Settings,
+        tree: &dyn Tree,
+    ) -> Result<Settings, SettingsError>;
 
     /// Starts the step for a run, or starts it again after a failed round.
-    fn start(&self, run: &RunContext, step: &Configured) -> Result<(), PluginError>;
+    fn start(&self, run: &RunContext, step: &StepSpec) -> Result<(), PluginError>;
 
     /// What a poll sees: the outcome once the step settles.
-    fn observe(&self, run: &RunContext, step: &Configured) -> Result<Option<Outcome>, PluginError>;
+    fn observe(
+        &self,
+        run: &RunContext,
+        step: &StepSpec,
+    ) -> Result<Option<Outcome>, PluginError>;
 }
 ```
 
@@ -131,6 +255,25 @@ A future `critic` or `recording` plugin is one more set of kinds,
 Files: `crates/core/src/pipeline/` (`Pipeline`, `StepSpec`, `Needs`, the config
 check), `crates/core/src/roles/step.rs`, `crates/cli/src/command_step.rs`, and
 each plugin's `steps.rs`.
+
+#### Structure
+
+A kind's outcomes are its own, which a step cannot change, or named by each
+step, as an agent's are; a step that names none settles `passed`. Every step
+can also settle `failed`.
+
+```rust
+pub struct Kind {
+    pub name: &'static str,
+    pub outcomes: Outcomes,
+    pub resident: bool,
+}
+
+pub enum Outcomes {
+    Own(&'static [&'static str]),
+    Named,
+}
+```
 
 ### The `build` pipeline
 
@@ -146,7 +289,8 @@ uses = "git.worktree"
 id = "builder"
 uses = "agent.session"
 brief = "builder"
-outcomes = ["opened", "nothing"]  # `atelier finish opened` once the draft pull request is open
+# `atelier finish opened` once the draft pull request is open
+outcomes = ["opened", "nothing"]
 
 [[pipeline.build.step]]
 id = "checks"
@@ -208,8 +352,11 @@ pipeline to a `rungs::Plan`, saves each run's `rungs::Progress` in `state.json`,
 and turns what rungs reports into actions:
 
 ```rust
-let plan = pipeline.lower()?;              // rungs::Plan: positions, outcomes, needs, attempts
-let mut run = plan.resume(saved.progress)?;    // the run's progress from state.json
+// rungs::Plan: positions, outcomes, needs, attempts
+let plan = pipeline.lower()?;
+
+// the run's progress from state.json
+let mut run = plan.resume(saved.progress)?;
 
 run.settle(WORKTREE, PASSED)?;
 let start = run.advance();                     // → [deps, audit]: in parallel

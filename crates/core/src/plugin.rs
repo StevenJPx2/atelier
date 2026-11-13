@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{Agent, Checks, Forge, Settings, SettingsError, Tracker};
+use crate::{Agent, Checks, Forge, Kinds, Settings, SettingsError, Step, Tracker};
 
 /// A crate atelier is built with. Its `register` adds the roles it fills.
 pub trait Plugin {
@@ -76,6 +76,7 @@ pub struct Registry<'a> {
     checks: Vec<(&'static str, MakeChecks<'a>)>,
     forges: Vec<(&'static str, &'a dyn Forge)>,
     agents: Vec<(&'static str, &'a dyn Agent)>,
+    steps: Vec<(&'static str, &'a dyn Step)>,
 }
 
 /// A project named a plugin, or relied on one, the build lacks.
@@ -96,6 +97,7 @@ impl<'a> Registry<'a> {
             checks: Vec::new(),
             forges: Vec::new(),
             agents: Vec::new(),
+            steps: Vec::new(),
         };
 
         for plugin in plugins {
@@ -135,6 +137,46 @@ impl<'a> Registry<'a> {
 
     pub fn agent(&mut self, agent: &'a dyn Agent) {
         self.agents.push((self.naming, agent));
+    }
+
+    /// Registers this plugin's kinds of step.
+    pub fn step(&mut self, step: &'a dyn Step) {
+        self.steps.push((self.naming, step));
+    }
+
+    /// The kinds of step a project can use: each plugin's under its own
+    /// name, and those of the project's agent, forge and only tracker under
+    /// `agent`, `forge` and `tracker`, so a committed config works with any
+    /// of them. With no `agent` named, the build's only agent is the agent.
+    #[must_use]
+    pub fn kinds(&self, agent: Option<&str>, forge: &str, trackers: &[&str]) -> Kinds<'a> {
+        let only_agent = match self.agents.as_slice() {
+            [(name, _)] => Some(*name),
+            _ => None,
+        };
+        let tracker = match trackers {
+            [tracker] => Some(*tracker),
+            _ => None,
+        };
+        let roles = [
+            ("agent", agent.or(only_agent)),
+            ("forge", Some(forge)),
+            ("tracker", tracker),
+        ];
+
+        let mut kinds = Kinds::default();
+
+        for (plugin, step) in &self.steps {
+            kinds = kinds.with(plugin, plugin, *step);
+
+            for (role, filled) in roles {
+                if filled == Some(*plugin) {
+                    kinds = kinds.with(role, plugin, *step);
+                }
+            }
+        }
+
+        kinds
     }
 
     /// # Errors

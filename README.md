@@ -236,3 +236,5 @@ describes its containment and reports.
 
 atelier is built by atelier, one slice at a time. Its plan is
 [issue #1](https://github.com/StevenJPx2/atelier/issues/1).
+
+<!-- canary proof, throwaway -->

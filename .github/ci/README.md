@@ -13,14 +13,14 @@ flowchart LR
     Gate --> Reports["reports.py<br/>Kani and mutants"]
 ```
 
-| File | Holds |
-| --- | --- |
-| `run.sh` | The runner-side launcher; refuses to run outside GitHub-hosted Linux |
-| `Dockerfile` | Tooling only: Rust, Node, Go, Python and pipx, with user 10001 |
-| `entrypoint.sh` | Copies the read-only checkout into the container, then plans or checks |
-| `cargo.py` | A `cargo` front that exports Kani's JSON and never leaves mutation evidence empty |
-| `reports.py` | Fail-closed validation of fresh Kani and cargo-mutants reports |
-| `test_reports.py` | The validator's own tests, run before every plan |
+| File              | Holds                                                                             |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `run.sh`          | The runner-side launcher; refuses to run outside GitHub-hosted Linux              |
+| `Dockerfile`      | Tooling only: Rust, Node, Go, Python and pipx, with user 10001                    |
+| `entrypoint.sh`   | Copies the read-only checkout into the container, then plans or checks            |
+| `cargo.py`        | A `cargo` front that exports Kani's JSON and never leaves mutation evidence empty |
+| `reports.py`      | Fail-closed validation of fresh Kani and cargo-mutants reports                    |
+| `test_reports.py` | The validator's own tests, run before every plan                                  |
 
 ## The container
 

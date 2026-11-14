@@ -73,7 +73,13 @@ jobs:
           fi
           matrix=$(bash "$CI_SUPPORT/run.sh" "$mode" "" . "$BASE")
           if [ "$mode" = plan ]; then
-            cp "$RUNNER_TEMP/atelier-reports/atelier" "$RUNNER_TEMP/atelier/atelier"
+            # The planner the container built must be a plain file, never a link.
+            built="$RUNNER_TEMP/atelier-reports/atelier"
+            if [ ! -f "$built" ] || [ -L "$built" ]; then
+              echo "the planner is not a plain file" >&2
+              exit 1
+            fi
+            cp "$built" "$RUNNER_TEMP/atelier/atelier"
           fi
           # The plan must be one JSON array, or no gate output is trusted.
           matrix=$(jq -ce 'if type == "array" then . else error("not a gate list") end' <<< "$matrix")

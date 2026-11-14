@@ -106,7 +106,9 @@ Mac: a broadcast target, not one command's process group. The mutation log
 ends as `cleanup_refuses_an_invalid_or_unreadable_group` starts. Cancelled
 Kani and mutant checks are not passing evidence.
 
-The signal-command boundary rejects 0 and 1 independently of parsing. Its
+Every group signal is built by `atelier_command::signal_group`, which
+refuses 0, 1 and any number `kill` would truncate to them, independently of
+parsing; the deadline kill and a background step's cleanup both use it. Its
 regression only prepares a command, so removing the guard produces an
 assertion failure without invoking `kill`. A guard is defense in depth, not
 containment: mutation can change the guard too.
@@ -114,10 +116,12 @@ containment: mutation can change the guard too.
 The planner and every gate run on GitHub-hosted Linux runners inside
 non-root containers with private PID namespaces, dropped capabilities,
 no-new-privileges, no Docker socket or host network, no credentials, and
-bounded memory, process count and time. Mutation and Kani reports must be
-fresh, nonempty and complete; zero missed mutants, zero timeouts and both
-existing Kani harnesses remain required. An empty mutation selection widens
-to the full workspace rather than passing without evidence.
+bounded memory, process count, CPU and time; disk and the bridge network are
+not bounded. A fresh offline container validates the reports: they must be
+nonempty and complete; zero missed mutants, zero timeouts and both existing
+Kani harnesses remain required. When a diff selects no mutant, the gate
+mutates the canary `crates/cli/src/command_step/run.rs` and the job summary
+names it apart from diff coverage, so the report is never empty.
 
 On this Mac, contributors and builders only edit, use `git` and `gh`, and
 run `cargo fmt`. Every other check, including the site build, belongs in CI.

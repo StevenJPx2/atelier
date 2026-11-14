@@ -1,6 +1,9 @@
 """Fail-closed checks for Kani 0.68 and cargo-mutants 27.1 CI reports.
 
-Usage: python3 .github/ci/reports.py <gate> <rootpath>
+Usage: python3 .github/ci/reports.py <gate> <reports> [--atelier]
+<reports> holds kani.json, mutants-selection.json, base.txt and
+mutants.out/outcomes.json, as the gate container wrote them to /reports.
+--atelier adds atelier's own floor: both core proofs, and the canary.
 Other gates rely on their process exit status and need no report.
 Contracts: Kani's kani-driver/src/frontend/schema_utils.rs and cargo-mutants'
 src/outcome.rs and src/output.rs at the pinned upstream release tags.
@@ -18,8 +21,9 @@ MAX_REPORT_BYTES = 128 * 1024 * 1024
 # The signal boundary of the 2026-11-13 host incident. When a change selects
 # no mutant, cargo.py mutates this file so the report is never empty.
 CANARY = "crates/cli/src/command_step/run.rs"
-# atelier's own floor: both core proofs, wherever atelier's gates run.
-ATELIER_PROOFS = Path("crates/core/src/machine/proofs.rs")
+# atelier's own floor applies in its repository's CI, which cannot rename
+# itself away the way a moved proofs file could.
+ATELIER_REPOSITORY = "wrkhse/atelier"
 ATELIER_HARNESSES = frozenset(
     {
         "machine::proofs::a_run_follows_what_rungs_answers",
@@ -199,7 +203,8 @@ def validate_phases(outcome: dict, summary: str) -> None:
         require(failure_status(final), f"missing failure evidence for {summary}")
 
 
-def validate_mutants(report: dict) -> list[str]:
+def validate_mutants(report: dict) -> dict:
+    """The tested mutants' names and files, and how many were caught."""
     require(report.get("cargo_mutants_version") == "27.1.0", "unexpected mutants version")
     start = timestamp(report.get("start_time"), "start_time")
     end = timestamp(report.get("end_time"), "end_time")
@@ -241,61 +246,66 @@ def validate_mutants(report: dict) -> list[str]:
     }
     for field, wanted in expected.items():
         require(count(report.get(field), field) == wanted, f"mutant count mismatch: {field}")
-    return files
+    return {"names": sorted(names), "files": files, "caught": counts["CaughtMutant"]}
 
 
-def validate_selection(selection: dict, files: list) -> str:
+def selected_names(selection: dict, tested: dict, label: str) -> int:
+    names = array_value(selection.get("selected"), "selected")
+    require(bool(names), f"the {label} selected no mutant")
+    require(sorted(names) == tested["names"], f"tested mutants differ from the {label}'s")
+    return len(names)
+
+
+def validate_selection(selection: dict, tested: dict, atelier: bool, fallback: bool) -> str:
     """Which mutants were tested and why; a canary never reads as diff coverage."""
-    kind = selection.get("kind")
-    total = len(files)
-    if kind == "diff":
+    mode = selection.get("mode")
+    if mode == "diff":
+        require(not fallback, "the base was unavailable, so only the canary is evidence")
         selected = count(selection.get("diff_selected"), "diff_selected")
-        require(selected > 0, "a diff selection must hold mutants")
-        require(total == selected, "tested mutants differ from the diff's selection")
+        require(selected == selected_names(selection, tested, "diff"), "diff count mismatch")
         return f"diff selected {selected} mutants; canary 0 mutants (not run)"
-    if kind == "canary":
+    if mode == "canary":
+        require(atelier, "the canary is atelier's own")
         require(count(selection.get("diff_selected"), "diff_selected") == 0, "canary with a diff")
         canary = selection.get("canary")
         require(canary == CANARY, f"unexpected canary: {canary}")
-        listed = count(selection.get("canary_listed"), "canary_listed")
-        require(listed > 0, "the canary yields no mutant")
-        require(total == listed, "tested mutants differ from the canary's selection")
-        require(all(file == CANARY for file in files), "a canary run mutated another file")
+        listed = selected_names(selection, tested, "canary")
+        require(all(file == CANARY for file in tested["files"]), "a canary mutated another file")
+        # All-unviable canary mutants would prove nothing about the tests.
+        require(tested["caught"] > 0, "no canary mutant was caught")
         why = selection.get("reason")
         require(isinstance(why, str) and bool(why.strip()), "canary run without a reason")
-        return f"diff selected 0 mutants; canary {listed} mutants in {CANARY} ({why})"
-    require(kind == "configured", f"unknown mutants selection: {kind}")
-    return f"{total} mutants as the gate configures them (no --in-diff)"
+        return f"diff selected 0 mutants; canary {listed} mutants in {CANARY}: {why}"
+    require(mode == "configured", f"unknown mutants selection: {mode}")
+    return f"{len(tested['names'])} mutants as the gate configures them (no --in-diff)"
 
 
-def validate(gate: str, root: Path) -> str | None:
+def validate(gate: str, reports: Path, atelier: bool) -> str | None:
     """Check `commands/kani` and `commands/mutants`; the summary line, if any."""
     name = gate.rpartition("/")[2]
     if name == "kani":
-        atelier = (root / ATELIER_PROOFS).is_file()
-        validate_kani(read_report(root / "ci-reports" / "kani.json"), atelier)
+        validate_kani(read_report(reports / "kani.json"), atelier)
     elif name == "mutants":
-        files = validate_mutants(read_report(root / "mutants.out" / "outcomes.json"))
-        selection = read_report(root / "ci-reports" / "mutants-selection.json")
-        return validate_selection(selection, files)
+        tested = validate_mutants(read_report(reports / "mutants.out" / "outcomes.json"))
+        selection = read_report(reports / "mutants-selection.json")
+        fallback = (reports / "base.txt").is_file()
+        return validate_selection(selection, tested, atelier, fallback)
     return None
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("gate")
-    parser.add_argument("rootpath", type=Path)
-    parser.add_argument("--summary", type=Path, help="write the summary line here")
+    parser.add_argument("reports", type=Path)
+    parser.add_argument("--atelier", action="store_true", help="atelier's own floor")
     args = parser.parse_args(argv)
     try:
-        summary = validate(args.gate, args.rootpath)
+        summary = validate(args.gate, args.reports, args.atelier)
     except (OSError, UnicodeError, ValueError, RecursionError) as error:
         print(f"{args.gate}: invalid CI report: {error}", file=sys.stderr)
         return 1
     if summary:
-        print(f"{args.gate}: {summary}")
-        if args.summary is not None:
-            args.summary.write_text(f"**{args.gate}:** {summary}\n", encoding="utf-8")
+        print(f"**{args.gate}:** {summary}")
     return 0
 
 

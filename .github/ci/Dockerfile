@@ -8,16 +8,18 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
     ca-certificates curl git libssl-dev pkg-config procps python3 python3-venv \
     shellcheck unzip \
     && rm -rf /var/lib/apt/lists/*
-# Debian 12's pipx 1.1.0 cannot run `ruff==VERSION`; pin a current one.
+# Debian 12's pipx 1.1.0 cannot run `ruff==VERSION`; pin a current one. The
+# ruff gate's own version is baked in, so the self-test needs no index.
 RUN python3 -m venv /opt/pipx \
-    && /opt/pipx/bin/pip install --no-cache-dir pipx==1.7.1 \
+    && /opt/pipx/bin/pip install --no-cache-dir pipx==1.7.1 ruff==0.17.4 \
     && ln -s /opt/pipx/bin/pipx /usr/local/bin/pipx
 COPY --from=node /usr/local/bin /usr/local/bin
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=go /usr/local/go /usr/local/go
 RUN rustup component add rustfmt clippy
 
-RUN useradd --uid 10001 --create-home ci && install -d -o ci -g ci /work
+# /reports is outside the copied checkout, so no committed file can sit there.
+RUN useradd --uid 10001 --create-home ci && install -d -o ci -g ci /work /reports
 COPY cargo.py /opt/ci/bin/cargo
 COPY entrypoint.sh /opt/ci/entrypoint.sh
 COPY reports.py test_reports.py /opt/ci/

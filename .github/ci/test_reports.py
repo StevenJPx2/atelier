@@ -118,38 +118,41 @@ def mutants_report() -> dict:
     }
 
 
+def diff_selection(value: object) -> dict:
+    """What cargo.py records when a diff selects exactly the report's mutants."""
+    try:
+        names = [item["scenario"]["Mutant"]["name"] for item in value["outcomes"][1:]]
+    except (KeyError, IndexError, TypeError):
+        names = []
+    return {"mode": "diff", "diff_selected": len(names), "selected": names}
+
+
 class ReportCase(unittest.TestCase):
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        # Most cases check atelier's own floor, so the root holds its proofs.
-        proofs = self.root / reports.ATELIER_PROOFS
-        proofs.parent.mkdir(parents=True)
-        proofs.write_text("", encoding="utf-8")
 
     def write(self, gate: str, value: object, selection: dict | None = None) -> Path:
         kani = gate.rpartition("/")[2] == "kani"
-        relative = "ci-reports/kani.json" if kani else "mutants.out/outcomes.json"
+        relative = "kani.json" if kani else "mutants.out/outcomes.json"
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value), encoding="utf-8")
         if not kani:
             # By default the report is what a diff selected.
-            total = value.get("total_mutants") if isinstance(value, dict) else None
-            selection = selection or {"kind": "diff", "diff_selected": total}
-            self.select(selection)
+            self.select(selection or diff_selection(value))
         return path
 
     def select(self, selection: dict) -> None:
-        path = self.root / "ci-reports" / "mutants-selection.json"
+        path = self.root / "mutants-selection.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(selection), encoding="utf-8")
 
     def rejected(self, gate: str, value: object) -> None:
         self.write(gate, value)
         with self.assertRaises(ValueError):
-            reports.validate(gate, self.root)
+            reports.validate(gate, self.root, True)
 
 
 class ReportTests(ReportCase):
@@ -158,7 +161,7 @@ class ReportTests(ReportCase):
             with self.subTest(gate=gate):
                 self.write(gate, value)
                 completed = subprocess.run(
-                    [sys.executable, str(SCRIPT), gate, str(self.root)],
+                    [sys.executable, str(SCRIPT), gate, str(self.root), "--atelier"],
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -169,18 +172,18 @@ class ReportTests(ReportCase):
     def test_matrix_gate_names_are_validated(self) -> None:
         for gate in ("commands/kani", "commands/mutants"):
             with self.subTest(gate=gate):
-                self.assertEqual(reports.main([gate, str(self.root)]), 1)
+                self.assertEqual(reports.main([gate, str(self.root), "--atelier"]), 1)
         self.write("commands/kani", kani_report())
         self.write("commands/mutants", mutants_report())
         for gate in ("commands/kani", "commands/mutants"):
             with self.subTest(gate=gate, report="good"):
-                self.assertEqual(reports.main([gate, str(self.root)]), 0)
+                self.assertEqual(reports.main([gate, str(self.root), "--atelier"]), 0)
 
     def test_cli_missing_report_fails(self) -> None:
         for gate in ("kani", "mutants", "commands/kani", "commands/mutants"):
             with self.subTest(gate=gate):
                 completed = subprocess.run(
-                    [sys.executable, str(SCRIPT), gate, str(self.root)],
+                    [sys.executable, str(SCRIPT), gate, str(self.root), "--atelier"],
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -193,12 +196,12 @@ class ReportTests(ReportCase):
         for gate in ("kani", "mutants"):
             with self.subTest(gate=gate, case="missing"):
                 with self.assertRaises(ValueError):
-                    reports.validate(gate, self.root)
+                    reports.validate(gate, self.root, True)
             for text in ("", " ", "{", "null", "[]", "true", "{}", '{"x":NaN}'):
                 with self.subTest(gate=gate, text=text):
                     self.write(gate, {}).write_text(text, encoding="utf-8")
                     with self.assertRaises(ValueError):
-                        reports.validate(gate, self.root)
+                        reports.validate(gate, self.root, True)
 
     def test_duplicate_json_keys_and_invalid_encoding(self) -> None:
         for gate in ("kani", "mutants"):
@@ -206,7 +209,7 @@ class ReportTests(ReportCase):
                 with self.subTest(gate=gate, raw=raw):
                     self.write(gate, {}).write_bytes(raw)
                     with self.assertRaises((ValueError, UnicodeError)):
-                        reports.validate(gate, self.root)
+                        reports.validate(gate, self.root, True)
 
     def test_oversized_reports_fail(self) -> None:
         original = reports.MAX_REPORT_BYTES
@@ -217,28 +220,33 @@ class ReportTests(ReportCase):
     def test_other_gates_need_no_report(self) -> None:
         for gate in ("fmt", "commands/clippy", "nextest", "doctest", "unknown"):
             with self.subTest(gate=gate):
-                self.assertEqual(reports.main([gate, str(self.root)]), 0)
+                self.assertEqual(reports.main([gate, str(self.root), "--atelier"]), 0)
 
     def test_main_reports_malformed_input_without_traceback(self) -> None:
         self.write("kani", {}).write_text("{", encoding="utf-8")
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
-            self.assertEqual(reports.main(["kani", str(self.root)]), 1)
+            self.assertEqual(reports.main(["kani", str(self.root), "--atelier"]), 1)
         self.assertIn("invalid CI report", stderr.getvalue())
 
 
 class KaniTests(ReportCase):
     def test_another_project_needs_only_consistent_complete_results(self) -> None:
-        (self.root / reports.ATELIER_PROOFS).unlink()
         self.write("kani", kani_report(["proofs::holds"], crate="other"))
-        reports.validate("commands/kani", self.root)
-        self.rejected("kani", kani_report([], crate="other"))
+        reports.validate("commands/kani", self.root, False)
+        self.write("kani", kani_report([], crate="other"))
+        with self.assertRaises(ValueError):
+            reports.validate("kani", self.root, False)
+        # In atelier's own CI the core proofs are required.
+        self.write("kani", kani_report(["proofs::holds"], crate="other"))
+        with self.assertRaises(ValueError):
+            reports.validate("kani", self.root, True)
 
     def test_atelier_requires_both_core_proofs(self) -> None:
         names = sorted(reports.ATELIER_HARNESSES)
         self.rejected("kani", kani_report(names[:1]))
         self.write("kani", kani_report([*names, "machine::proofs::another"]))
-        reports.validate("kani", self.root)
+        reports.validate("kani", self.root, True)
 
     def test_summary_must_be_complete_and_consistent(self) -> None:
         for field, value in (
@@ -323,7 +331,7 @@ class KaniTests(ReportCase):
         properties["total_properties"] = 2
         properties["unreachable"] = 1
         self.write("kani", report)
-        reports.validate("kani", self.root)
+        reports.validate("kani", self.root, True)
 
     def test_property_counts_and_error_details_fail_closed(self) -> None:
         for field, value in (
@@ -437,7 +445,7 @@ class MutantsTests(ReportCase):
         report["outcomes"].pop(1)
         report.update(total_mutants=1, caught=0)
         self.write("mutants", report)
-        reports.validate("mutants", self.root)
+        reports.validate("mutants", self.root, True)
 
 
 def canary_report() -> dict:
@@ -449,64 +457,88 @@ def canary_report() -> dict:
 
 def canary_selection(**changes: object) -> dict:
     selection = {
-        "kind": "canary",
+        "mode": "canary",
         "diff_selected": 0,
         "canary": reports.CANARY,
-        "canary_listed": 2,
+        "selected": diff_selection(canary_report())["selected"],
         "reason": "the diff against abc selects no mutant",
     }
     return {**selection, **changes}
 
 
 class SelectionTests(ReportCase):
-    def test_diff_selection_names_its_count(self) -> None:
+    def test_diff_selection_names_its_count_and_mutants(self) -> None:
         self.write("mutants", mutants_report())
-        summary = reports.validate("commands/mutants", self.root)
+        summary = reports.validate("commands/mutants", self.root, True)
         self.assertEqual(summary, "diff selected 2 mutants; canary 0 mutants (not run)")
-        self.write("mutants", mutants_report(), {"kind": "diff", "diff_selected": 3})
-        with self.assertRaises(ValueError):
-            reports.validate("mutants", self.root)
-        self.write("mutants", mutants_report(), {"kind": "diff", "diff_selected": 0})
-        with self.assertRaises(ValueError):
-            reports.validate("mutants", self.root)
+        good = diff_selection(mutants_report())
+        cases = {
+            "count": {**good, "diff_selected": 3},
+            "names": {**good, "selected": ["src/lib.rs:9: other", good["selected"][1]]},
+            "empty": {**good, "diff_selected": 0, "selected": []},
+        }
+        for case, selection in cases.items():
+            with self.subTest(case=case):
+                self.write("mutants", mutants_report(), selection)
+                with self.assertRaises(ValueError):
+                    reports.validate("mutants", self.root, True)
 
     def test_missing_or_unknown_selection_fails(self) -> None:
         self.write("mutants", mutants_report())
-        (self.root / "ci-reports" / "mutants-selection.json").unlink()
+        (self.root / "mutants-selection.json").unlink()
         with self.assertRaises(ValueError):
-            reports.validate("mutants", self.root)
-        self.write("mutants", mutants_report(), {"kind": "whole"})
+            reports.validate("mutants", self.root, True)
+        self.write("mutants", mutants_report(), {"mode": "whole"})
         with self.assertRaises(ValueError):
-            reports.validate("mutants", self.root)
+            reports.validate("mutants", self.root, True)
 
     def test_canary_never_reads_as_diff_coverage(self) -> None:
         self.write("mutants", canary_report(), canary_selection())
-        summary = reports.validate("mutants", self.root)
+        summary = reports.validate("mutants", self.root, True)
         self.assertTrue(summary.startswith("diff selected 0 mutants; canary 2 mutants"))
         self.assertIn(reports.CANARY, summary)
         self.assertIn("selects no mutant", summary)
 
-    def test_canary_must_be_complete_and_confined(self) -> None:
+    def test_canary_must_be_complete_confined_and_caught(self) -> None:
+        unviable = canary_report()
+        unviable["outcomes"][1] = copy.deepcopy(unviable["outcomes"][2])
+        unviable["outcomes"][1]["scenario"]["Mutant"]["name"] = "src/lib.rs:1: replace true"
+        unviable.update(caught=0, unviable=2)
         cases = {
             "other file": (mutants_report(), canary_selection()),
-            "zero listed": (canary_report(), canary_selection(canary_listed=0)),
-            "count differs": (canary_report(), canary_selection(canary_listed=3)),
+            "none selected": (canary_report(), canary_selection(selected=[])),
+            "names differ": (canary_report(), canary_selection(selected=["x", "y"])),
             "no reason": (canary_report(), canary_selection(reason=" ")),
             "with a diff": (canary_report(), canary_selection(diff_selected=1)),
             "moved": (canary_report(), canary_selection(canary="crates/x.rs")),
+            "all unviable": (unviable, canary_selection()),
         }
         for case, (report, selection) in cases.items():
             with self.subTest(case=case):
                 self.write("mutants", report, selection)
                 with self.assertRaises(ValueError):
-                    reports.validate("mutants", self.root)
+                    reports.validate("mutants", self.root, True)
 
-    def test_summary_file_through_cli(self) -> None:
+    def test_canary_is_atelier_only(self) -> None:
         self.write("mutants", canary_report(), canary_selection())
-        summary = self.root / "summary.md"
-        code = reports.main(["commands/mutants", str(self.root), "--summary", str(summary)])
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root, False)
+
+    def test_an_unavailable_base_allows_only_the_canary(self) -> None:
+        (self.root / "base.txt").write_text("base 000 is unavailable\n", encoding="utf-8")
+        self.write("mutants", mutants_report())
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root, True)
+        self.write("mutants", canary_report(), canary_selection(reason="base 000 is unavailable"))
+        reports.validate("mutants", self.root, True)
+
+    def test_summary_through_cli(self) -> None:
+        self.write("mutants", canary_report(), canary_selection())
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = reports.main(["commands/mutants", str(self.root), "--atelier"])
         self.assertEqual(code, 0)
-        self.assertIn("canary 2 mutants", summary.read_text(encoding="utf-8"))
+        self.assertIn("**commands/mutants:** diff selected 0 mutants; canary 2", stdout.getvalue())
 
 
 class WrapperTests(unittest.TestCase):
@@ -516,50 +548,74 @@ class WrapperTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        (self.root / "ci-reports").mkdir()
-        original = (cargo.REPORTS, cargo.listed, Path.cwd())
+        (self.root / "reports").mkdir()
+        original = (cargo.REPORTS, cargo.listed, Path.cwd(), os.environ.get("PROJECT"))
         self.addCleanup(self.restore, *original)
-        cargo.REPORTS = self.root / "ci-reports"
+        cargo.REPORTS = self.root / "reports"
+        os.environ["PROJECT"] = reports.ATELIER_REPOSITORY
         os.chdir(self.root)
 
     @staticmethod
-    def restore(reports_dir: Path, listed: object, cwd: Path) -> None:
+    def restore(reports_dir: Path, listed: object, cwd: Path, project: str | None) -> None:
         cargo.REPORTS, cargo.listed = reports_dir, listed
         os.chdir(cwd)
+        if project is None:
+            os.environ.pop("PROJECT", None)
+        else:
+            os.environ["PROJECT"] = project
+
+    def canary(self) -> None:
+        canary = self.root / reports.CANARY
+        canary.parent.mkdir(parents=True)
+        canary.write_text("", encoding="utf-8")
 
     def selection(self) -> dict:
-        path = self.root / "ci-reports" / "mutants-selection.json"
+        path = self.root / "reports" / "mutants-selection.json"
         return json.loads(path.read_text(encoding="utf-8"))
 
     def test_a_diff_with_mutants_runs_as_configured(self) -> None:
-        cargo.listed = lambda args: [{}, {}]
+        cargo.listed = lambda args: [{"name": "b"}, {"name": "a"}]
         args = ["mutants", "--in-diff", "d", "--jobs", "3"]
-        self.assertEqual(cargo.arguments(args), args)
-        self.assertEqual(self.selection(), {"kind": "diff", "diff_selected": 2})
+        output = str(self.root / "reports")
+        self.assertEqual(cargo.arguments(args), [*args, "--output", output])
+        expected = {"mode": "diff", "diff_selected": 2, "selected": ["a", "b"]}
+        self.assertEqual(self.selection(), expected)
 
     def test_an_empty_diff_mutates_the_canary_and_says_why(self) -> None:
-        canary = self.root / reports.CANARY
-        canary.parent.mkdir(parents=True)
-        canary.write_text("", encoding="utf-8")
-        (self.root / "ci-reports" / "base.txt").write_text("base 000 is unavailable\n")
-        cargo.listed = lambda args: [{}] * 3 if "--file" in args else []
-        args = cargo.arguments(["mutants", "--in-diff", "d", "--jobs", "3"])
-        self.assertEqual(args, ["mutants", "--file", reports.CANARY, "--jobs", "3"])
+        self.canary()
+        cargo.listed = lambda args: [{"name": "c"}] if "--file" in args else []
+        args = cargo.arguments(["mutants", "--in-diff", "d", "--jobs", "3", "--", "-q"])
+        output = str(self.root / "reports")
+        expected = ["mutants", "--jobs", "3", "--file", reports.CANARY, "--output", output]
+        self.assertEqual(args, [*expected, "--", "-q"])
         selection = self.selection()
-        self.assertEqual(selection["kind"], "canary")
-        self.assertEqual(selection["canary_listed"], 3)
-        self.assertEqual(selection["reason"], "base 000 is unavailable")
+        self.assertEqual(selection["mode"], "canary")
+        self.assertEqual(selection["selected"], ["c"])
+        self.assertIn("selects no mutant", selection["reason"])
 
-    def test_a_missing_or_empty_canary_fails(self) -> None:
+    def test_an_unavailable_base_goes_straight_to_the_canary(self) -> None:
+        self.canary()
+        (self.root / "reports" / "base.txt").write_text("base 000 is unavailable\n")
+        # A diff against a moved origin/main must not stand in for this change.
+        cargo.listed = lambda args: [{"name": "c"}] if "--file" in args else [{"name": "x"}]
+        for spelling in (["--in-diff", "d"], ["-D", "d"], ["--in-diff=d"]):
+            with self.subTest(spelling=spelling):
+                cargo.arguments(["mutants", *spelling])
+                self.assertEqual(self.selection()["mode"], "canary")
+                self.assertEqual(self.selection()["reason"], "base 000 is unavailable")
+
+    def test_a_missing_empty_or_foreign_canary_fails(self) -> None:
         cargo.listed = lambda args: []
         with self.assertRaises(ValueError):
             cargo.arguments(["mutants", "--in-diff", "d"])
-        canary = self.root / reports.CANARY
-        canary.parent.mkdir(parents=True)
-        canary.write_text("", encoding="utf-8")
+        self.canary()
         with self.assertRaises(ValueError):
             cargo.arguments(["mutants", "--in-diff", "d"])
-        self.assertFalse((self.root / "ci-reports" / "mutants-selection.json").exists())
+        cargo.listed = lambda args: [{"name": "c"}] if "--file" in args else []
+        os.environ["PROJECT"] = "someone/else"
+        with self.assertRaises(ValueError):
+            cargo.arguments(["mutants", "--in-diff", "d"])
+        self.assertFalse((self.root / "reports" / "mutants-selection.json").exists())
 
 
 if __name__ == "__main__":

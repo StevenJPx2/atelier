@@ -11,22 +11,26 @@ from pathlib import Path
 # file in the repository.
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
-from reports import CANARY  # noqa: E402
+from reports import ATELIER_REPOSITORY, CANARY  # noqa: E402
 
 CARGO = "/usr/local/cargo/bin/cargo"
-REPORTS = Path("/work/ci-reports")
+REPORTS = Path("/reports")
 LIMIT_SECS = 3600
 
 
 def listed(args: list[str]) -> list:
     """The mutants `args` select; cargo-mutants prints nothing for none."""
-    output = subprocess.run(
-        [CARGO, *args, "--list", "--json"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=LIMIT_SECS,
-    ).stdout
+    try:
+        output = subprocess.run(
+            [CARGO, *args, "--list", "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=LIMIT_SECS,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        print(error.stderr, file=sys.stderr)
+        raise
 
     if not output.strip():
         return []
@@ -39,42 +43,66 @@ def listed(args: list[str]) -> list:
     return mutants
 
 
-def reason() -> str:
-    """Why the diff selected nothing, in the words the job summary shows."""
-    note = REPORTS / "base.txt"
-
-    if note.is_file():
-        return note.read_text(encoding="utf-8").strip()
-
-    return f"the diff against {os.environ.get('ATELIER_BASE', 'the base')} selects no mutant"
+def options(args: list[str], *extra: str) -> list[str]:
+    """`args` with cargo-mutants options added before any test arguments."""
+    end = args.index("--") if "--" in args else len(args)
+    return [*args[:end], *extra, *args[end:]]
 
 
-def select(args: list[str]) -> tuple[list[str], dict]:
-    """The diff's mutants, or the canary's when the diff selects none."""
-    diff = listed(args)
+def without_diff(args: list[str]) -> list[str] | None:
+    """`args` without their diff filter, or None when they have none."""
+    for index, arg in enumerate(args):
+        if arg in ("--in-diff", "-D"):
+            return [*args[:index], *args[index + 2 :]]
 
-    if diff:
-        return args, {"kind": "diff", "diff_selected": len(diff)}
+        if arg.startswith("--in-diff="):
+            return [*args[:index], *args[index + 1 :]]
+
+    return None
+
+
+def canary(args: list[str], why: str) -> tuple[list[str], dict]:
+    """Mutate the canary instead of an empty diff; atelier's own CI only."""
+    if os.environ.get("PROJECT") != ATELIER_REPOSITORY:
+        raise ValueError(f"{why}; the canary is atelier's own, so this gate has no evidence")
 
     if not Path(CANARY).is_file():
-        raise ValueError(f"no mutant selected and no canary {CANARY} to mutate")
+        raise ValueError(f"{why}, and the canary {CANARY} is missing")
 
-    position = args.index("--in-diff")
-    canary = [*args[:position], "--file", CANARY, *args[position + 2 :]]
-    mutants = listed(canary)
+    rest = without_diff(args)
+    assert rest is not None, "only a diff run falls back to the canary"
+    mutants = listed(options(rest, "--file", CANARY))
 
     # A canary that shrinks to nothing is no evidence either.
     if not mutants:
         raise ValueError(f"the canary {CANARY} yields no mutant")
 
     selection = {
-        "kind": "canary",
+        "mode": "canary",
         "diff_selected": 0,
         "canary": CANARY,
-        "canary_listed": len(mutants),
-        "reason": reason(),
+        "selected": sorted(mutant.get("name") for mutant in mutants),
+        "reason": why,
     }
-    return canary, selection
+    return options(rest, "--file", CANARY), selection
+
+
+def select(args: list[str]) -> tuple[list[str], dict]:
+    """The diff's mutants, or the canary's when the diff has none to give."""
+    note = REPORTS / "base.txt"
+
+    # Without a usable base the diff is not this change's; never call it one.
+    if note.is_file():
+        return canary(args, note.read_text(encoding="utf-8").strip())
+
+    diff = listed(args)
+
+    if not diff:
+        base = os.environ.get("ATELIER_BASE", "the base")
+        return canary(args, f"the diff against {base} selects no mutant")
+
+    names = sorted(mutant.get("name") for mutant in diff)
+    return args, {"mode": "diff", "diff_selected": len(diff), "selected": names}
 
 
 def arguments(args: list[str]) -> list[str]:
@@ -83,17 +111,18 @@ def arguments(args: list[str]) -> list[str]:
         export = ["-Z", "unstable-options", "--export-json"]
         return [*args, *export, str(REPORTS / "kani.json")]
 
-    if not args or args[0] != "mutants" or "--list" in args:
+    if not args or args[0] != "mutants" or any(arg.startswith("--list") for arg in args):
         return args
 
-    if "--in-diff" in args:
+    if without_diff(args) is not None:
         args, selection = select(args)
     else:
-        selection = {"kind": "configured"}
+        selection = {"mode": "configured"}
 
     (REPORTS / "mutants-selection.json").write_text(json.dumps(selection), encoding="utf-8")
     print(f"mutants selection: {json.dumps(selection)}", file=sys.stderr)
-    return args
+    # One report folder outside the checkout, whatever the gate's root.
+    return options(args, "--output", str(REPORTS))
 
 
 def main() -> int:

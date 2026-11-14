@@ -190,25 +190,8 @@ fn kill(group: u64) {
 }
 
 fn signal(signal: &str, group: u64) -> bool {
-    signal_command(signal, group)
+    atelier_command::signal_group(signal, group)
         .is_some_and(|mut command| command.status().is_ok_and(|status| status.success()))
-}
-
-/// Prepares an explicit group target without starting a child process.
-fn signal_command(signal: &str, group: u64) -> Option<Command> {
-    // Targets 0 and 1 would address our group or every permitted process,
-    // and `kill` truncates a larger number into its pid range, so 2^32 + 1
-    // would reach every process too.
-    if !i32::try_from(group).is_ok_and(|group| group > 1) {
-        return None;
-    }
-
-    let mut command = Command::new("kill");
-    command
-        .args([signal, "--", &format!("-{group}")])
-        .stderr(Stdio::null());
-
-    Some(command)
 }
 
 fn now() -> u64 {
@@ -282,30 +265,6 @@ mod tests {
     impl Drop for Scratch {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn signal_commands_reject_broad_targets_without_execution() {
-        use std::ffi::OsStr;
-
-        // Inspect preparation only: even a missing guard must never run kill.
-        for signal in ["-0", "-KILL"] {
-            for group in [0, 1, 1 << 32, (1 << 32) + 1, u64::MAX] {
-                assert!(
-                    signal_command(signal, group).is_none(),
-                    "prepared {signal} for forbidden group {group}"
-                );
-            }
-
-            let command = signal_command(signal, 2).expect("group 2 is an explicit target");
-            let args: Vec<&OsStr> = command.get_args().collect();
-
-            assert_eq!(command.get_program(), OsStr::new("kill"));
-            assert_eq!(
-                args,
-                [OsStr::new(signal), OsStr::new("--"), OsStr::new("-2")]
-            );
         }
     }
 

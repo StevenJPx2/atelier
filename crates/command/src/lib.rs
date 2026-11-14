@@ -67,9 +67,9 @@ pub fn run(mut command: Command, deadline: Duration) -> Result<Output, PluginErr
             Ok(None) if started.elapsed() >= deadline => {
                 // The group too: a child the tool started, such as ssh, would
                 // otherwise hold the output open past the deadline.
-                let _ = Command::new("kill")
-                    .args(["-KILL", "--", &format!("-{}", child.id())])
-                    .status();
+                if let Some(mut kill) = signal_group("-KILL", u64::from(child.id())) {
+                    let _ = kill.status();
+                }
                 let _ = child.kill();
                 let _ = child.wait();
                 break Err(format!("{program} ran past {deadline:?}"));
@@ -88,6 +88,35 @@ pub fn run(mut command: Command, deadline: Duration) -> Result<Output, PluginErr
         stdout,
         stderr,
     })
+}
+
+/// Prepares `kill <signal> -- -<group>` for one process group without
+/// starting it, or `None` when the target would reach more than that group.
+///
+/// Every group signal atelier sends is built here, so the guard holds at
+/// both the deadline kill above and a background step's cleanup.
+///
+/// ```
+/// let command = atelier_command::signal_group("-KILL", 4242).unwrap();
+///
+/// assert_eq!(command.get_program(), "kill");
+/// assert!(atelier_command::signal_group("-KILL", 1).is_none());
+/// ```
+#[must_use]
+pub fn signal_group(signal: &str, group: u64) -> Option<Command> {
+    // Targets 0 and 1 would address our group or every permitted process,
+    // and `kill` truncates a larger number into its pid range, so 2^32 + 1
+    // would reach every process too.
+    if !i32::try_from(group).is_ok_and(|group| group > 1) {
+        return None;
+    }
+
+    let mut command = Command::new("kill");
+    command
+        .args([signal, "--", &format!("-{group}")])
+        .stderr(Stdio::null());
+
+    Some(command)
 }
 
 /// Reads `stream` to its end, keeping its last `MAX_OUTPUT` bytes. Reading
@@ -126,6 +155,44 @@ fn collect(handle: thread::JoinHandle<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn group_signals_refuse_broad_targets_without_execution() {
+        use std::ffi::OsStr;
+
+        let highest = u64::from(i32::MAX.unsigned_abs());
+        let refused = [
+            0,
+            1,
+            highest + 1,
+            u64::from(u32::MAX),
+            1 << 32,
+            (1 << 32) + 1,
+            u64::MAX,
+        ];
+
+        // Inspect preparation only: even a missing guard must never run kill.
+        for signal in ["-0", "-KILL"] {
+            for group in refused {
+                assert!(
+                    signal_group(signal, group).is_none(),
+                    "prepared {signal} for forbidden group {group}"
+                );
+            }
+
+            for group in [2, highest] {
+                let command = signal_group(signal, group).expect("an explicit target");
+                let args: Vec<&OsStr> = command.get_args().collect();
+                let target = format!("-{group}");
+
+                assert_eq!(command.get_program(), OsStr::new("kill"));
+                assert_eq!(
+                    args,
+                    [OsStr::new(signal), OsStr::new("--"), OsStr::new(&target)]
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_command_past_its_deadline_is_killed_with_its_children() {

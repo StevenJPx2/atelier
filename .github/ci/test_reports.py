@@ -2,9 +2,11 @@
 
 import contextlib
 import copy
+import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -15,6 +17,13 @@ SCRIPT = Path(__file__).with_name("reports.py")
 SPEC = importlib.util.spec_from_file_location("ci_reports", SCRIPT)
 reports = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(reports)
+
+# In the image the wrapper is bin/cargo; in the repository, cargo.py.
+WRAPPER = SCRIPT.with_name("bin") / "cargo"
+WRAPPER = WRAPPER if WRAPPER.is_file() else SCRIPT.with_name("cargo.py")
+LOADER = importlib.machinery.SourceFileLoader("ci_cargo", str(WRAPPER))
+cargo = importlib.util.module_from_spec(importlib.util.spec_from_loader("ci_cargo", LOADER))
+LOADER.exec_module(cargo)
 
 
 def kani_report(names: list[str] | None = None, crate: str = "atelier_core") -> dict:
@@ -96,12 +105,12 @@ def mutants_report() -> dict:
                 "phase_results": phases(),
             },
             {
-                "scenario": {"Mutant": {"name": "src/lib.rs:1: replace true"}},
+                "scenario": {"Mutant": {"name": "src/lib.rs:1: replace true", "file": "src/lib.rs"}},
                 "summary": "CaughtMutant",
                 "phase_results": phases({"Failure": 100}),
             },
             {
-                "scenario": {"Mutant": {"name": "src/lib.rs:2: replace return"}},
+                "scenario": {"Mutant": {"name": "src/lib.rs:2: replace return", "file": "src/lib.rs"}},
                 "summary": "Unviable",
                 "phase_results": phases({"Failure": 101}, unviable=True),
             },
@@ -119,13 +128,23 @@ class ReportCase(unittest.TestCase):
         proofs.parent.mkdir(parents=True)
         proofs.write_text("", encoding="utf-8")
 
-    def write(self, gate: str, value: object) -> Path:
+    def write(self, gate: str, value: object, selection: dict | None = None) -> Path:
         kani = gate.rpartition("/")[2] == "kani"
         relative = "ci-reports/kani.json" if kani else "mutants.out/outcomes.json"
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value), encoding="utf-8")
+        if not kani:
+            # By default the report is what a diff selected.
+            total = value.get("total_mutants") if isinstance(value, dict) else None
+            selection = selection or {"kind": "diff", "diff_selected": total}
+            self.select(selection)
         return path
+
+    def select(self, selection: dict) -> None:
+        path = self.root / "ci-reports" / "mutants-selection.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(selection), encoding="utf-8")
 
     def rejected(self, gate: str, value: object) -> None:
         self.write(gate, value)
@@ -419,6 +438,128 @@ class MutantsTests(ReportCase):
         report.update(total_mutants=1, caught=0)
         self.write("mutants", report)
         reports.validate("mutants", self.root)
+
+
+def canary_report() -> dict:
+    report = mutants_report()
+    for outcome in report["outcomes"][1:]:
+        outcome["scenario"]["Mutant"]["file"] = reports.CANARY
+    return report
+
+
+def canary_selection(**changes: object) -> dict:
+    selection = {
+        "kind": "canary",
+        "diff_selected": 0,
+        "canary": reports.CANARY,
+        "canary_listed": 2,
+        "reason": "the diff against abc selects no mutant",
+    }
+    return {**selection, **changes}
+
+
+class SelectionTests(ReportCase):
+    def test_diff_selection_names_its_count(self) -> None:
+        self.write("mutants", mutants_report())
+        summary = reports.validate("commands/mutants", self.root)
+        self.assertEqual(summary, "diff selected 2 mutants; canary 0 mutants (not run)")
+        self.write("mutants", mutants_report(), {"kind": "diff", "diff_selected": 3})
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root)
+        self.write("mutants", mutants_report(), {"kind": "diff", "diff_selected": 0})
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root)
+
+    def test_missing_or_unknown_selection_fails(self) -> None:
+        self.write("mutants", mutants_report())
+        (self.root / "ci-reports" / "mutants-selection.json").unlink()
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root)
+        self.write("mutants", mutants_report(), {"kind": "whole"})
+        with self.assertRaises(ValueError):
+            reports.validate("mutants", self.root)
+
+    def test_canary_never_reads_as_diff_coverage(self) -> None:
+        self.write("mutants", canary_report(), canary_selection())
+        summary = reports.validate("mutants", self.root)
+        self.assertTrue(summary.startswith("diff selected 0 mutants; canary 2 mutants"))
+        self.assertIn(reports.CANARY, summary)
+        self.assertIn("selects no mutant", summary)
+
+    def test_canary_must_be_complete_and_confined(self) -> None:
+        cases = {
+            "other file": (mutants_report(), canary_selection()),
+            "zero listed": (canary_report(), canary_selection(canary_listed=0)),
+            "count differs": (canary_report(), canary_selection(canary_listed=3)),
+            "no reason": (canary_report(), canary_selection(reason=" ")),
+            "with a diff": (canary_report(), canary_selection(diff_selected=1)),
+            "moved": (canary_report(), canary_selection(canary="crates/x.rs")),
+        }
+        for case, (report, selection) in cases.items():
+            with self.subTest(case=case):
+                self.write("mutants", report, selection)
+                with self.assertRaises(ValueError):
+                    reports.validate("mutants", self.root)
+
+    def test_summary_file_through_cli(self) -> None:
+        self.write("mutants", canary_report(), canary_selection())
+        summary = self.root / "summary.md"
+        code = reports.main(["commands/mutants", str(self.root), "--summary", str(summary)])
+        self.assertEqual(code, 0)
+        self.assertIn("canary 2 mutants", summary.read_text(encoding="utf-8"))
+
+
+class WrapperTests(unittest.TestCase):
+    """cargo.py's choice of mutants, with cargo-mutants' listing stubbed."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "ci-reports").mkdir()
+        original = (cargo.REPORTS, cargo.listed, Path.cwd())
+        self.addCleanup(self.restore, *original)
+        cargo.REPORTS = self.root / "ci-reports"
+        os.chdir(self.root)
+
+    @staticmethod
+    def restore(reports_dir: Path, listed: object, cwd: Path) -> None:
+        cargo.REPORTS, cargo.listed = reports_dir, listed
+        os.chdir(cwd)
+
+    def selection(self) -> dict:
+        path = self.root / "ci-reports" / "mutants-selection.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_a_diff_with_mutants_runs_as_configured(self) -> None:
+        cargo.listed = lambda args: [{}, {}]
+        args = ["mutants", "--in-diff", "d", "--jobs", "3"]
+        self.assertEqual(cargo.arguments(args), args)
+        self.assertEqual(self.selection(), {"kind": "diff", "diff_selected": 2})
+
+    def test_an_empty_diff_mutates_the_canary_and_says_why(self) -> None:
+        canary = self.root / reports.CANARY
+        canary.parent.mkdir(parents=True)
+        canary.write_text("", encoding="utf-8")
+        (self.root / "ci-reports" / "base.txt").write_text("base 000 is unavailable\n")
+        cargo.listed = lambda args: [{}] * 3 if "--file" in args else []
+        args = cargo.arguments(["mutants", "--in-diff", "d", "--jobs", "3"])
+        self.assertEqual(args, ["mutants", "--file", reports.CANARY, "--jobs", "3"])
+        selection = self.selection()
+        self.assertEqual(selection["kind"], "canary")
+        self.assertEqual(selection["canary_listed"], 3)
+        self.assertEqual(selection["reason"], "base 000 is unavailable")
+
+    def test_a_missing_or_empty_canary_fails(self) -> None:
+        cargo.listed = lambda args: []
+        with self.assertRaises(ValueError):
+            cargo.arguments(["mutants", "--in-diff", "d"])
+        canary = self.root / reports.CANARY
+        canary.parent.mkdir(parents=True)
+        canary.write_text("", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            cargo.arguments(["mutants", "--in-diff", "d"])
+        self.assertFalse((self.root / "ci-reports" / "mutants-selection.json").exists())
 
 
 if __name__ == "__main__":

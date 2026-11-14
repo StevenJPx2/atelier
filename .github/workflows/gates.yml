@@ -62,7 +62,7 @@ jobs:
         name: List the gates the changes touch, in the container
         env:
           ATELIER: ${{ inputs.atelier }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_SUPPORT: ${{ github.workspace }}/ci/.github/ci
           SOURCE: ${{ github.workspace }}/source
         run: |
@@ -121,7 +121,7 @@ jobs:
         env:
           GATE: ${{ matrix.gate }}
           ROOT: ${{ matrix.root }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           CI_SUPPORT: ${{ github.workspace }}/ci/.github/ci
           SOURCE: ${{ github.workspace }}/source
         run: |

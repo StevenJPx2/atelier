@@ -39,4 +39,10 @@ timeout --signal=TERM --kill-after=30s 75m \
 # Evidence collection cannot turn a failed, timed-out or killed run green.
 docker cp "$name:/work/ci-reports/." "$reports/" >&2 || true
 docker cp "$name:/work/mutants.out" "$reports/mutants.out" >&2 || true
+# Say which evidence a gate rests on: the diff's mutants or the canary's.
+for note in base.txt summary.md; do
+  if [[ -f "$reports/$note" && -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    cat "$reports/$note" >> "$GITHUB_STEP_SUMMARY"
+  fi
+done
 exit "$status"

@@ -17,6 +17,17 @@ if [[ "$MODE" == selftest ]]; then
 fi
 
 diff=()
+# A push's `before` is all zeros on a branch's first push and unreachable
+# after a force push. Then every gate is planned, mutants use the canary,
+# and the job summary says so; it never passes as an empty diff.
+if [[ "${BASE:-}" =~ ^0+$ ]] || { [[ -n "${BASE:-}" ]] \
+  && ! git -C /work cat-file -e "$BASE^{commit}" 2>/dev/null; }; then
+  echo "base $BASE is unavailable (first or forced push): every gate runs and mutants use the canary" \
+    > /work/ci-reports/base.txt
+  cat /work/ci-reports/base.txt >&2
+  BASE=
+fi
+
 if [[ -n "${BASE:-}" ]]; then
   diff=(--diff "$BASE")
 fi
@@ -43,5 +54,5 @@ status=${codes[0]}
 if [[ ${codes[1]} -ne 0 && $status -eq 0 ]]; then
   status=1
 fi
-python3 /opt/ci/reports.py "$GATE" "/work/$ROOT" || status=1
+python3 /opt/ci/reports.py "$GATE" "/work/$ROOT" --summary ci-reports/summary.md || status=1
 exit "$status"

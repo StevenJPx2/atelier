@@ -56,11 +56,20 @@ A gate passes only when `atelier check` exits 0 and its report is valid.
   finished run, a successful baseline, at least one mutant, and no missed,
   timed-out or failed mutant. Unviable mutants keep their existing meaning.
 
-When a diff selects no mutant, as on a push to `main` or a docs-only change,
-`cargo.py` mutates `crates/cli/src/command_step/run.rs`, the signal
-boundary of the host incident, so the report is never empty and the run stays
-within the gate's hour. Every report is
-uploaded as an artifact, also when the gate fails.
+When a diff selects no mutant, as on a docs-only change, `cargo.py` mutates
+the canary `crates/cli/src/command_step/run.rs`, the signal boundary of the
+host incident, so the report is never empty and the run stays within the
+gate's hour. `ci-reports/mutants-selection.json` records which it was, and the
+job summary says `diff selected N mutants` or `diff selected 0 mutants; canary
+M mutants` with the reason; a canary run never reads as diff coverage. Both
+keep the floor of 0 missed and 0 timeouts, and a missing canary, or one that
+yields no mutant, fails the gate.
+
+A push to `main` diffs against the push's `before` commit. When that is all
+zeros or unreachable (a first or forced push), every gate runs, mutants use
+the canary, and the summary says so.
+
+Every report is uploaded as an artifact, also when the gate fails.
 
 Linux containers do not prove Darwin's process-group signalling. That needs a
 separately approved disposable macOS environment.

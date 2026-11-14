@@ -103,7 +103,7 @@ fn its_ci_calls_atelier_s_gates_pinned_to_the_release_commit() {
     assert!(text.contains("    branches: [v2]\n"), "{text}");
     assert!(
         text.contains(
-            "    uses: StevenJPx2/atelier/.github/workflows/gates.yml@c3e906af5f90 # v0.1.0-rc.7\n"
+            "    uses: wrkhse/atelier/.github/workflows/gates.yml@c3e906af5f90 # v0.1.0-rc.7\n"
         ),
         "{text}"
     );

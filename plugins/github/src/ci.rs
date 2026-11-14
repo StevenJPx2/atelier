@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   gates:
-    uses: StevenJPx2/atelier/.github/workflows/gates.yml@{commit} # v{release}
+    uses: wrkhse/atelier/.github/workflows/gates.yml@{commit} # v{release}
     with:
       atelier: {release}
 "

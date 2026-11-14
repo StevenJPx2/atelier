@@ -351,7 +351,7 @@ dependencies = [
 [[package]]
 name = "rungs"
 version = "0.1.0"
-source = "git+https://github.com/StevenJPx2/rungs?tag=v0.1.0#c5e7e3c9782d51ce1df244fcabb51f9bcffa2f54"
+source = "git+https://github.com/wrkhse/rungs?tag=v0.1.0#c5e7e3c9782d51ce1df244fcabb51f9bcffa2f54"
 
 [[package]]
 name = "rustc-demangle"

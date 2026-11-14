@@ -12,7 +12,7 @@ from string import Template
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ("darwin-arm64", "linux-arm64", "linux-x64")
-REPOSITORY = "https://github.com/StevenJPx2/atelier"
+REPOSITORY = "https://github.com/wrkhse/atelier"
 # Releases contain only a native binary and the license, each at most 128 MiB.
 MAX_FILE_BYTES = 128 * 1024 * 1024
 MEMBERS = ("bin/atelier", "share/atelier/LICENSE")

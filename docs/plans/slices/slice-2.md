@@ -481,7 +481,7 @@ on:
     branches: [main]
 jobs:
   gates:
-    uses: StevenJPx2/atelier/.github/workflows/gates.yml@<commit>
+    uses: wrkhse/atelier/.github/workflows/gates.yml@<commit>
     with:
       atelier: 0.1.0-rc.7
 ```

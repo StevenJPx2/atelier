@@ -1,5 +1,7 @@
 # A project's gates, one job each, as atelier gates lists them. Projects
 # call it from the .github/workflows/atelier.yml that atelier init writes.
+# Project code, the planner and every gate run inside a bounded, non-root
+# container; see .github/ci/README.md.
 name: gates
 
 on:
@@ -16,57 +18,79 @@ permissions:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # atelier fetches the base branch to read the project's config.
-          persist-credentials: true
+          path: source
+          persist-credentials: false
           fetch-depth: 0
-      - name: Install atelier
+      - name: Require the reusable workflow's own commit
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: test -n "$WORKFLOW_REPOSITORY" && test -n "$WORKFLOW_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: ci
+          persist-credentials: false
+          sparse-checkout: .github/ci
+      - name: Download the atelier release
+        if: inputs.atelier != 'source'
         env:
           ATELIER: ${{ inputs.atelier }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/atelier"
+          archive="atelier-$ATELIER-linux-x64.tar.gz"
+          gh release download "v$ATELIER" --repo wrkhse/atelier \
+            --pattern "$archive" --pattern SHA256SUMS --dir "$RUNNER_TEMP/release"
+          (cd "$RUNNER_TEMP/release" && sha256sum --check --ignore-missing SHA256SUMS)
+          tar -xzf "$RUNNER_TEMP/release/$archive" -C "$RUNNER_TEMP/release" bin/atelier
+          cp "$RUNNER_TEMP/release/bin/atelier" "$RUNNER_TEMP/atelier/atelier"
+      - name: Check the report validator
+        env:
+          CI_SUPPORT: ${{ github.workspace }}/ci/.github/ci
+          SOURCE: ${{ github.workspace }}/source
+        run: bash "$CI_SUPPORT/run.sh" selftest
+      - id: plan
+        name: List the gates the changes touch, in the container
+        env:
+          ATELIER: ${{ inputs.atelier }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          CI_SUPPORT: ${{ github.workspace }}/ci/.github/ci
+          SOURCE: ${{ github.workspace }}/source
+        run: |
+          set -euo pipefail
+          mode=plan-release
           if [ "$ATELIER" = source ]; then
-            cargo build --locked -p atelier-cli
-            cp target/debug/atelier "$RUNNER_TEMP/atelier/atelier"
-          else
-            archive="atelier-$ATELIER-linux-x64.tar.gz"
-            gh release download "v$ATELIER" --repo StevenJPx2/atelier \
-              --pattern "$archive" --pattern SHA256SUMS --dir "$RUNNER_TEMP/release"
-            (cd "$RUNNER_TEMP/release" && sha256sum --check --ignore-missing SHA256SUMS)
-            tar -xzf "$RUNNER_TEMP/release/$archive" -C "$RUNNER_TEMP/release" bin/atelier
-            cp "$RUNNER_TEMP/release/bin/atelier" "$RUNNER_TEMP/atelier/atelier"
+            mode=plan
           fi
+          matrix=$(bash "$CI_SUPPORT/run.sh" "$mode" "" . "$BASE")
+          if [ "$mode" = plan ]; then
+            cp "$RUNNER_TEMP/atelier-reports/atelier" "$RUNNER_TEMP/atelier/atelier"
+          fi
+          # The plan must be one JSON array, or no gate output is trusted.
+          matrix=$(jq -ce 'if type == "array" then . else error("not a gate list") end' <<< "$matrix")
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: atelier
           path: ${{ runner.temp }}/atelier/atelier
           if-no-files-found: error
-      - id: plan
-        name: List the gates the changes touch
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          atelier="$RUNNER_TEMP/atelier/atelier"
-          if [ -n "$BASE" ]; then
-            matrix=$("$atelier" gates --json --diff "$BASE")
-          else
-            matrix=$("$atelier" gates --json)
-          fi
-          echo "$matrix"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   gate:
     needs: plan
     if: needs.plan.outputs.matrix != '[]'
     name: ${{ matrix.gate }} (${{ matrix.root }})
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -74,23 +98,39 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: true
+          path: source
+          persist-credentials: false
           fetch-depth: 0
+      - name: Require the reusable workflow's own commit
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: test -n "$WORKFLOW_REPOSITORY" && test -n "$WORKFLOW_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: ci
+          persist-credentials: false
+          sparse-checkout: .github/ci
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: atelier
           path: ${{ runner.temp }}/atelier
-      - name: Run the gate
+      - name: Run the gate in the container
         env:
           GATE: ${{ matrix.gate }}
           ROOT: ${{ matrix.root }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          CI_SUPPORT: ${{ github.workspace }}/ci/.github/ci
+          SOURCE: ${{ github.workspace }}/source
         run: |
           set -euo pipefail
-          atelier="$RUNNER_TEMP/atelier/atelier"
-          chmod +x "$atelier"
-          diff=()
-          if [ -n "$BASE" ]; then
-            diff=(--diff "$BASE")
-          fi
-          "$atelier" check --setup --gate "$GATE" --root "$ROOT" "${diff[@]}"
+          chmod +x "$RUNNER_TEMP/atelier/atelier"
+          bash "$CI_SUPPORT/run.sh" gate "$GATE" "$ROOT" "$BASE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: reports-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/atelier-reports
+          if-no-files-found: error

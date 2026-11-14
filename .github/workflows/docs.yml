@@ -16,8 +16,6 @@ concurrency:
 jobs:
   site:
     runs-on: ubuntu-latest
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     defaults:
       run:
         working-directory: site
@@ -35,6 +33,15 @@ jobs:
           bun-version: "1.4.4"
       - run: bun install --frozen-lockfile
       - run: bun run build
+      # The token reaches only these steps, never the install or the build.
+      - id: token
+        name: Check for the deploy token
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: echo "present=${CLOUDFLARE_API_TOKEN:+yes}" >> "$GITHUB_OUTPUT"
       - name: Deploy
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.CLOUDFLARE_API_TOKEN != ''
+        if: steps.token.outputs.present == 'yes'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx cf deploy --message "${GITHUB_SHA}"

@@ -1,6 +1,9 @@
 # actionlint 1.7.12 predates job.workflow_repository and job.workflow_sha,
 # which GitHub documents in its job context reference.
+# The gate runs actionlint from .github, and 1.7.12 matches these globs
+# against paths relative to that directory, not the repository root as its
+# docs say; `**/` matches either.
 paths:
-  .github/workflows/gates.yml:
+  "**/workflows/gates.yml":
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'

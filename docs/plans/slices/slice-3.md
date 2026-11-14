@@ -716,6 +716,28 @@ impl older::IssueFile {
 
 ### Verification
 
+Every check runs on GitHub-hosted runners. The planner and gates run as a
+non-root user inside a Linux container with its own PID namespace, no host
+network or Docker socket, no credentials, and bounded time, memory, CPU and
+process counts. Mutants run on Linux only. A separate offline container
+validates the reports: missing, empty or incomplete Kani and mutation reports
+fail their gates, and a diff that selects no mutant mutates a named canary
+instead; existing tests and proof bounds stay.
+
+On 2026-11-13, a host mutation run changed command-group validation to accept
+group 1. A cleanup test reached `kill -KILL -- -1` on the Mac. Every group
+signal is built by `atelier_command::signal_group`, which refuses groups 0
+and 1 and numbers `kill` would truncate to them, independently of file
+parsing; its regression constructs commands without executing them. This guard does not
+replace process isolation. [The incident record](../../audits/atelier.md#host-mutation-signal-incident)
+keeps the evidence and containment rule.
+
+On the development Mac, only editing, `git`, `gh` and `cargo fmt` are allowed.
+No compile, Clippy, test, metadata, docs build, Kani, mutants or atelier binary
+runs locally. Linux CI does not prove
+native Darwin signalling behavior; that needs separately approved disposable
+macOS isolation, never a host mutation run.
+
 - Kani as above, and the config check's refusals, one test each.
 - The recorded event sequences of slices 1 and 2 on the written-out `build`,
   against an in-memory world, with a stop after any save resuming to the same

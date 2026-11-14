@@ -190,11 +190,8 @@ fn kill(group: u64) {
 }
 
 fn signal(signal: &str, group: u64) -> bool {
-    Command::new("kill")
-        .args([signal, "--", &format!("-{group}")])
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+    atelier_command::signal_group(signal, group)
+        .is_some_and(|mut command| command.status().is_ok_and(|status| status.success()))
 }
 
 fn now() -> u64 {

@@ -227,5 +227,11 @@ request, labels the issue blocked and stops.
 
 ## Building atelier
 
+On this Mac, contributors and builders may edit files, use `git` and `gh`,
+and run `cargo fmt`. Every other check, including the docs build, runs in
+GitHub-hosted CI. Do not run atelier, tests, Kani or mutation testing locally,
+even in a local container. [AGENTS.md](AGENTS.md) is the builder's safety rule;
+[the CI runner](.github/ci/README.md) describes its containment and reports.
+
 atelier is built by atelier, one slice at a time. Its plan is
 [issue #1](https://github.com/StevenJPx2/atelier/issues/1).

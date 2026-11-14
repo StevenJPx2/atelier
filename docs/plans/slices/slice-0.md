@@ -66,7 +66,8 @@ fn main() -> std::io::Result<ExitCode>;
 Verification: the packaged smoke run executes the built binary's `--version`
 and `--help` on each target; slice 0 has no Rust tests. Mutation testing
 excludes `main` by name until slice 1 gives it behavior to test. The MSRV check runs on
-Rust 1.96; the approved plan's pinned stable toolchain is Rust 1.99.1.
+the workspace's declared minimum. Development and CI pin stable Rust 1.100.0;
+the [Rust 1.100 page](../rust-1.100.md) lists what it leaves open.
 
 ### Check workflow
 

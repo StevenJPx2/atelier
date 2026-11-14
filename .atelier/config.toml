@@ -39,8 +39,8 @@ cargo mutants --in-diff target/mutants.diff --timeout 120 --jobs 3
 '''
 
 [commands.msrv]
-setup = ["rustup toolchain install 1.96 --profile minimal"]
-run = "cargo +1.96 check --workspace --all-targets --all-features --locked"
+setup = ["rustup toolchain install 1.100.0 --profile minimal"]
+run = "cargo +1.100.0 check --workspace --all-targets --all-features --locked"
 
 [commands.kani]
 setup = ["cargo install --locked kani-verifier --version 0.68.0", "cargo kani setup"]

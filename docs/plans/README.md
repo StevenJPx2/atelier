@@ -24,3 +24,6 @@ are the approved contract. [GitHub](https://github.com/StevenJPx2/atelier/issues
 and [OpenCode](https://github.com/StevenJPx2/atelier/issues/7) have separate
 plugin plans. Each slice page describes what is built, its Structure and its
 checks.
+
+[Rust 1.100](rust-1.100.md) is the workspace's minimum and pinned toolchain;
+its page lists the simplifications it allows and what remains to prove.

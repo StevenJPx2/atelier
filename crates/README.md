@@ -36,8 +36,9 @@ cargo run --locked -p atelier-cli -- --version
 ## Rules
 
 - Every member inherits the workspace version, edition, license and lints.
-- The approved plan pins stable Rust; development uses `1.99.1` and CI also
-  checks the declared `1.96` minimum.
+- Development and CI pin stable Rust `1.100.0`; every crate inherits the
+  declared `1.100` minimum, which CI checks. The
+  [Rust 1.100 page](../docs/plans/rust-1.100.md) lists what it leaves open.
 - Core has no dependencies and performs no I/O. Concrete tools stay outside it.
 - Functions contain at most 70 nonblank, noncomment lines.
 - Failures are values; production paths contain no unwraps, expects or panics.
@@ -47,13 +48,16 @@ cargo run --locked -p atelier-cli -- --version
 
 ## Checks
 
+These are the gates CI runs, each inside its contained runner; on a
+developer's Mac only `cargo fmt` runs, as [AGENTS.md](../AGENTS.md) says.
+
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo nextest run --workspace --all-targets --all-features --locked
 cargo test --workspace --doc --all-features --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
-cargo +1.96 check --workspace --all-targets --all-features --locked
+cargo +1.100.0 check --workspace --all-targets --all-features --locked
 cargo deny check
 cargo mutants --workspace --timeout 120
 cargo kani -p atelier-core

@@ -99,6 +99,8 @@ both say 5.
 
 ## Host mutation signal incident
 
+<!-- canary proof, throwaway -->
+
 **Status: Containment required for slice 3; no release claimed.** On
 2026-11-13, local mutation testing for PR #57 changed command-group validation
 to return group 1. The cleanup regression reached `kill -KILL -- -1` on the
